@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CETI Dariana — Comunicados</title>
+
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1a5276">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CETI Dariana">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+body{margin:0;padding:0;background:#f0f3f7;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+// ── SEGURANÇA — SHA-256 via Web Crypto API ────────────────────────────────────
+async function sha256(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
+// ── TEMAS ─────────────────────────────────────────────────────────────────────
+const THEMES = {
+  padrao:  { header:"#1a5276", headerText:"#fff", headerSub:"#aed6f1", bg:"#f0f3f7", card:"#fff", cardBorder:"#e8ecf0", text:"#2c3e50", textSub:"#7f8c8d", textMuted:"#95a5a6", input:"#fff", inputBorder:"#d5d8dc", inputText:"#2c3e50", btnPrimary:"#1a5276", btnText:"#fff", aba:"#1a5276", urgente:"#e74c3c", urgenteBg:"#fdecea", badgeBg:"#eaf2f8", badgeText:"#1a5276" },
+  preto:   { header:"#26262e", headerText:"#f59e0b", headerSub:"#a78bfa", bg:"#1e1e24", card:"#26262e", cardBorder:"#34343f", text:"#f59e0b", textSub:"#a78bfa", textMuted:"#34d399", input:"#2c2c36", inputBorder:"#3c3c48", inputText:"#f59e0b", btnPrimary:"#f59e0b", btnText:"#1e1e24", aba:"#f59e0b", urgente:"#f87171", urgenteBg:"#2a1a1a", badgeBg:"#2c2c36", badgeText:"#a78bfa" },
+  azul:    { header:"#3b82f6", headerText:"#fff", headerSub:"#bfdbfe", bg:"#dbeafe", card:"#eff6ff", cardBorder:"#bfdbfe", text:"#1e40af", textSub:"#3b6fd4", textMuted:"#7eaadc", input:"#e8f1ff", inputBorder:"#b8d4fe", inputText:"#1e40af", btnPrimary:"#3b82f6", btnText:"#fff", aba:"#3b82f6", urgente:"#ef4444", urgenteBg:"#fef2f2", badgeBg:"#dbeafe", badgeText:"#1e40af" },
+  magenta: { header:"#ec4899", headerText:"#fff", headerSub:"#fbcfe8", bg:"#fce7f3", card:"#fdf2f8", cardBorder:"#fbcfe8", text:"#9d174d", textSub:"#be4d7a", textMuted:"#d88aaa", input:"#fceef8", inputBorder:"#f9c6e4", inputText:"#9d174d", btnPrimary:"#ec4899", btnText:"#fff", aba:"#ec4899", urgente:"#f43f5e", urgenteBg:"#fff0f3", badgeBg:"#fce7f3", badgeText:"#9d174d" },
+};
+const THEME_DOTS = [
+  { key:"padrao",  cor:"#1a5276", borda:"#aed6f1" },
+  { key:"preto",   cor:"#26262e", borda:"#f59e0b" },
+  { key:"azul",    cor:"#dbeafe", borda:"#3b82f6" },
+  { key:"magenta", cor:"#fce7f3", borda:"#ec4899" },
+];
+
+function ThemePicker({ atual, onChange }) {
+  return (
+    <div style={{ display:"flex", gap:8, alignItems:"center", padding:"4px 8px", borderRadius:99, background:"rgba(255,255,255,0.15)" }}>
+      {THEME_DOTS.map(({ key, cor, borda }) => (
+        <div key={key} onClick={() => onChange(key)} style={{
+          width:22, height:22, borderRadius:"50%", background:cor,
+          border:`3px solid ${atual===key ? borda : "rgba(255,255,255,0.3)"}`,
+          cursor:"pointer",
+          boxShadow: atual===key ? `0 0 0 2px ${borda}` : "0 1px 3px rgba(0,0,0,0.3)",
+          transform: atual===key ? "scale(1.25)" : "scale(1)",
+          transition:"all 0.2s",
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// ── DADOS INICIAIS ────────────────────────────────────────────────────────────
+// Senhas armazenadas como SHA-256. Nunca armazenar texto puro.
+// sha256("1234") = 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
+const USUARIOS_ESCOLA = [
+  { id:"escola1", email:"CETIDariana", senha:"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", tipo:"escola", nome:"Dariana" },
+];
+
+// sha256("1234")   = 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
+// sha256("123456") = 8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92
+const ALUNOS_INICIAIS = [
+  { id:"pai1", tipo:"pai", filho:"Lucas Silva",  turma:"9A", nome:"João Silva",   email:"joao@gmail.com",          senha:"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4" },
+  { id:"pai2", tipo:"pai", filho:"Ana Costa",    turma:"9B", nome:"Maria Costa",  email:"maria.costa@email.com",   senha:"8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" },
+  { id:"pai3", tipo:"pai", filho:"Pedro Lima",   turma:"8A", nome:"Carlos Lima",  email:"carlos.lima@email.com",   senha:"8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92" },
+];
+
+const COMUNICADOS_INICIAIS = [
+  { id:1, titulo:"Reunião de Pais — Dia 28 de Maio", corpo:"Convidamos todos os responsáveis para a reunião de pais do 3º bimestre.\n\nDia: 28 de maio (quinta-feira)\nHorário: 19h\nLocal: Auditório da escola\n\nSua presença é muito importante!", tipo:"reuniao", visibilidade:"todos", turmas:["9A","9B","8A"], alunoId:null, autor:"Direção", data:"2026-05-20T09:00:00", urgente:false },
+  { id:2, titulo:"⚡ Quadra Interditada Esta Semana", corpo:"A quadra poliesportiva está em manutenção e ficará fechada esta semana.\n\nAs aulas de Educação Física serão no pátio coberto.\n\nDesculpe o transtorno.", tipo:"aviso", visibilidade:"turma", turmas:["9A"], alunoId:null, autor:"Prof. Ermeson", data:"2026-05-22T07:30:00", urgente:true },
+  { id:3, titulo:"Cardápio Especial — Semana da Saúde", corpo:"Esta semana o refeitório vai servir frutas da época, saladas e pratos saudáveis todos os dias.\n\nVenha experimentar!", tipo:"informativo", visibilidade:"todos", turmas:["9A","9B","8A"], alunoId:null, autor:"Secretaria", data:"2026-05-17T08:00:00", urgente:false },
+  { id:4, titulo:"Recado para o Lucas Silva", corpo:"Sr. João,\n\nO Lucas esqueceu a mochila na sala. Ela está guardada na secretaria.\n\nPode vir buscar em qualquer horário.", tipo:"aviso", visibilidade:"aluno", turmas:["9A"], alunoId:"pai1", autor:"Secretaria", data:"2026-05-21T14:00:00", urgente:false },
+];
+
+const MENSAGENS_INICIAIS = {
+  pai1:[ { id:1, de:"pai", texto:"Bom dia! Queria saber sobre as notas do Lucas.", data:"2026-05-20T08:10:00" }, { id:2, de:"escola", texto:"Bom dia, Sr. João! O Lucas foi muito bem em Matemática. Pode ficar tranquilo.", data:"2026-05-20T09:30:00" } ],
+  pai2:[], pai3:[],
+};
+
+const COR_TIPO = {
+  reuniao:     { emoji:"👥", cor:"#6366f1", label:"Reunião" },
+  aviso:       { emoji:"📢", cor:"#f59e0b", label:"Aviso" },
+  informativo: { emoji:"📋", cor:"#10b981", label:"Informativo" },
+};
+
+function tempoAtras(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff/60000);
+  if (m < 1) return "agora mesmo";
+  if (m < 60) return `${m} min atrás`;
+  const h = Math.floor(m/60);
+  if (h < 24) return `${h}h atrás`;
+  return `${Math.floor(h/24)} dias atrás`;
+}
+
+// ── APP ───────────────────────────────────────────────────────────────────────
+function App() {
+  const [usuario,       setUsuario]       = useState(null);
+  const [alunos,        setAlunos]        = useState(ALUNOS_INICIAIS);
+  const [comunicados,   setComunicados]   = useState(COMUNICADOS_INICIAIS);
+  const [mensagens,     setMensagens]     = useState(MENSAGENS_INICIAIS);
+  const [themeKey,      setThemeKey]      = useState("padrao");
+  const [appBloqueado,  setAppBloqueado]  = useState(false);
+  const [telaPropriet,  setTelaPropriet]  = useState(false);
+  const [nomeEscola,    setNomeEscola]    = useState("CETI");
+  const [telEscola,     setTelEscola]     = useState("(92) 99276-7068");
+  const [whatsEscola,   setWhatsEscola]   = useState("5592992767068");
+  const th = THEMES[themeKey];
+
+  const [presencas, setPresencas] = useState({});
+
+  const todosPerfis = [...USUARIOS_ESCOLA, ...alunos];
+
+  const login = async (email, senha) => {
+    const hash = await sha256(senha.trim());
+    return todosPerfis.find(u =>
+      u.email.toLowerCase().trim() === email.toLowerCase().trim() &&
+      u.senha === hash
+    ) || null;
+  };
+
+  if (appBloqueado) return <TelaBloqueada whatsEscola={whatsEscola} telEscola={telEscola} onDesbloquear={() => setAppBloqueado(false)} />;
+
+  if (telaPropriet) return (
+    <TelaProprietario
+      nomeEscola={nomeEscola} setNomeEscola={setNomeEscola}
+      telEscola={telEscola}   setTelEscola={setTelEscola}
+      whatsEscola={whatsEscola} setWhatsEscola={setWhatsEscola}
+      alunos={alunos} setAlunos={setAlunos}
+      comunicados={comunicados} setComunicados={setComunicados}
+      themeKey={themeKey} onChangeTheme={setThemeKey}
+      appBloqueado={appBloqueado} setAppBloqueado={setAppBloqueado}
+      onVoltar={() => setTelaPropriet(false)}
+    />
+  );
+
+  if (!usuario) return <TelaLogin onLogin={u => setUsuario(u)} loginFn={login} th={th} themeKey={themeKey} onChangeTheme={setThemeKey} onAbrirPropriet={() => setTelaPropriet(true)} nomeEscola={nomeEscola} telEscola={telEscola} whatsEscola={whatsEscola} />;
+
+  if (usuario.tipo === "escola") return (
+    <TelaEscola usuario={usuario} comunicados={comunicados} setComunicados={setComunicados}
+      mensagens={mensagens} setMensagens={setMensagens} alunos={alunos} setAlunos={setAlunos}
+      presencas={presencas}
+      onSair={() => setUsuario(null)} th={th} themeKey={themeKey} onChangeTheme={setThemeKey} />
+  );
+
+  return (
+    <TelaPai usuario={usuario} comunicados={comunicados}
+      mensagens={mensagens} setMensagens={setMensagens}
+      presencas={presencas} setPresencas={setPresencas}
+      onSair={() => setUsuario(null)} th={th} themeKey={themeKey} onChangeTheme={setThemeKey} />
+  );
+}
+
+// ── TELA LOGIN ────────────────────────────────────────────────────────────────
+function TelaLogin({ onLogin, loginFn, th, themeKey, onChangeTheme, onAbrirPropriet, nomeEscola, telEscola, whatsEscola }) {
+  const [email, setEmail]     = useState("");
+  const [senha, setSenha]     = useState("");
+  const [erro, setErro]       = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Modal proprietário
+  const [modalPropriet, setModalPropriet] = useState(false);
+  const [etapaPropriet, setEtapaPropriet] = useState(1); // 1=palavra-chave, 2=login
+  const [pEmail, setPEmail]   = useState("");
+  const [pSenha, setPSenha]   = useState("");
+  const [pPalavra, setPPalavra] = useState("");
+  const [pErro, setPErro]     = useState("");
+
+  // Credenciais do proprietário — armazenadas como SHA-256
+  // sha256("Atlanta")      = a6c2221569febb76282953aabf85f648511cbe327a8b20580e6029998184cdeb
+  // sha256("escola@gmail.com") = comparado em lowercase antes de hash
+  // sha256("Bra24071996$") = 94f91d251f7f2ea8679e29f2dae78ab5fc066713a4fd499e075e0a542421068a
+  const PROPRIETARIO = {
+    email: "escola@gmail.com",
+    senhaHash: "94f91d251f7f2ea8679e29f2dae78ab5fc066713a4fd499e075e0a542421068a",
+    palavraChaveHash: "d3ecc5b7fe38ffd3397473362f2c42321fb82deb23083ed13cf6f20320ab6c92",
+  };
+
+  const entrar = () => {
+    setErro("");
+    const emailTrim = email.trim();
+    const senhaTrim = senha.trim();
+    if (!emailTrim || !senhaTrim) { setErro("Preencha o login e a senha."); return; }
+    setLoading(true);
+    loginFn(emailTrim, senhaTrim).then(u => {
+      if (u) { onLogin(u); } else { setErro("Login ou senha incorretos."); setLoading(false); }
+    });
+  };
+
+  const verificarPalavra = async () => {
+    setPErro("");
+    const hash = await sha256(pPalavra.trim().toLowerCase());
+    if (hash !== PROPRIETARIO.palavraChaveHash) { setPErro("Palavra-chave incorreta."); return; }
+    setEtapaPropriet(2);
+    setPErro("");
+  };
+
+  const entrarPropriet = async () => {
+    setPErro("");
+    if (pEmail.trim().toLowerCase() !== PROPRIETARIO.email.toLowerCase()) { setPErro("E-mail incorreto."); return; }
+    const hash = await sha256(pSenha);
+    if (hash !== PROPRIETARIO.senhaHash) { setPErro("Senha incorreta."); return; }
+    setModalPropriet(false);
+    setEtapaPropriet(1);
+    onAbrirPropriet();
+  };
+
+  const fecharModal = () => { setModalPropriet(false); setEtapaPropriet(1); setPEmail(""); setPSenha(""); setPPalavra(""); setPErro(""); };
+
+  const iS = { width:"100%", padding:"14px 16px", borderRadius:12, border:`2px solid ${th.inputBorder}`, fontSize:16, color:th.inputText, background:th.input, outline:"none", fontFamily:"'Nunito',sans-serif", marginBottom:14 };
+  const iSm = { width:"100%", padding:"12px 14px", borderRadius:10, border:"2px solid #334", fontSize:14, color:"#eee", background:"#1a1a2e", outline:"none", fontFamily:"'Nunito',sans-serif", marginBottom:12 };
+
+  return (
+    <div style={{ minHeight:"100vh", background:th.header, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Nunito',sans-serif", position:"relative" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box}`}</style>
+
+      {/* Ícone oculto proprietário — 2 cliques rápidos */}
+      {(() => {
+        return (
+          <div
+            onClick={() => {
+              if (!window._propClicks) window._propClicks = 0;
+              window._propClicks++;
+              clearTimeout(window._propTimer);
+              if (window._propClicks >= 2) { window._propClicks = 0; setModalPropriet(true); }
+              else { window._propTimer = setTimeout(() => { window._propClicks = 0; }, 600); }
+            }}
+            style={{ position:"absolute", top:16, left:16, width:40, height:40, cursor:"default", opacity:0.01, userSelect:"none", zIndex:100 }}
+          />
+        );
+      })()}
+
+      {/* ThemePicker */}
+      <div style={{ position:"absolute", top:20, right:20 }}><ThemePicker atual={themeKey} onChange={onChangeTheme} /></div>
+
+      <div style={{ textAlign:"center", marginBottom:32 }}>
+        <div style={{ fontSize:56 }}>🏫</div>
+        <div style={{ fontSize:28, fontWeight:900, color:th.headerText }}>{nomeEscola}</div>
+        <div style={{ fontSize:15, color:th.headerSub, marginTop:4 }}>Comunicados da Escola</div>
+      </div>
+      <div style={{ background:th.card, borderRadius:24, padding:28, width:"100%", maxWidth:380, boxShadow:"0 8px 40px rgba(0,0,0,0.25)" }}>
+        <div style={{ fontSize:20, fontWeight:800, color:th.text, marginBottom:6 }}>Entrar</div>
+        <div style={{ fontSize:14, color:th.textSub, marginBottom:24 }}>Use o e-mail e a senha que a escola te deu.</div>
+        <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:6 }}>👤 Login</label>
+        <input type="text" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Seu login" style={iS} onKeyDown={e=>e.key==="Enter"&&entrar()} />
+        <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:6 }}>🔒 Sua Senha</label>
+        <input type="password" value={senha} onChange={e=>setSenha(e.target.value)} placeholder="••••••" style={{ ...iS, fontSize:18 }} onKeyDown={e=>e.key==="Enter"&&entrar()} />
+        {erro && <div style={{ background:th.urgenteBg, border:`2px solid ${th.urgente}`, borderRadius:10, padding:"10px 14px", fontSize:14, color:th.urgente, fontWeight:700, marginBottom:14 }}>⚠️ {erro}</div>}
+        <button onClick={entrar} disabled={loading} style={{ width:"100%", padding:16, borderRadius:14, border:"none", background:loading?th.textMuted:th.btnPrimary, color:th.btnText, fontSize:18, fontWeight:800, cursor:loading?"default":"pointer", fontFamily:"'Nunito',sans-serif", marginTop:4 }}>
+          {loading ? "Entrando..." : "Entrar →"}
+        </button>
+        <div style={{ marginTop:18, textAlign:"center", fontSize:13, color:th.textMuted, lineHeight:1.6 }}>
+          Esqueceu a senha? Fale com a escola pelo WhatsApp{" "}
+          <a href={`https://wa.me/${whatsEscola}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none", display:"inline-flex", alignItems:"center", gap:6, verticalAlign:"middle", background:"#25d366", borderRadius:20, padding:"4px 10px 4px 6px", marginLeft:4 }}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="22" height="22" style={{ display:"block", flexShrink:0 }}>
+              <circle cx="24" cy="24" r="24" fill="#25d366"/>
+              <path fill="#fff" d="M34.3 13.7A14.9 14.9 0 0 0 24 9.5C16 9.5 9.5 16 9.5 24c0 2.6.7 5.1 2 7.3L9.3 38.5l7.4-1.9a14.9 14.9 0 0 0 7.3 1.9c8 0 14.5-6.5 14.5-14.5 0-3.9-1.5-7.5-4.2-10.3zm-10.3 22.3a12.4 12.4 0 0 1-6.3-1.7l-.4-.3-4.4 1.2 1.2-4.3-.3-.5a12.4 12.4 0 0 1-1.9-6.4c0-6.8 5.6-12.4 12.4-12.4 3.3 0 6.4 1.3 8.7 3.6a12.3 12.3 0 0 1 3.6 8.8c0 6.8-5.5 12.4-12.4 12.4zm6.8-9.3c-.4-.2-2.2-1.1-2.6-1.2-.4-.1-.6-.2-.9.2-.3.4-1 1.2-1.2 1.4-.2.3-.5.3-.9.1-.4-.2-1.6-.6-3-1.8a11 11 0 0 1-2.1-2.5c-.2-.4 0-.6.2-.8l.6-.7.4-.6v-.6l-1.2-2.8c-.3-.7-.6-.6-.9-.6h-.7c-.3 0-.7.1-1 .4-.4.4-1.4 1.3-1.4 3.2s1.4 3.7 1.6 4c.2.2 2.8 4.3 6.8 6 .9.4 1.7.6 2.2.8.9.3 1.8.2 2.4.1.7-.1 2.2-.9 2.5-1.8.3-.9.3-1.6.2-1.8-.1-.2-.4-.3-.8-.5z"/>
+            </svg>
+            <span style={{ color:"#fff", fontWeight:800, fontSize:13 }}>{telEscola}</span>
+          </a>
+        </div>
+      </div>
+
+      {/* Modal login proprietário */}
+      {modalPropriet && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9999, padding:20 }}>
+          <div style={{ background:"#12122a", borderRadius:20, padding:28, width:"100%", maxWidth:360, boxShadow:"0 8px 40px rgba(0,0,0,0.6)", border:"2px solid #2a2a5a" }}>
+            <div style={{ fontSize:22, fontWeight:900, color:"#f59e0b", marginBottom:4 }}>🔐 Acesso Proprietário</div>
+            <div style={{ fontSize:13, color:"#8888bb", marginBottom:20 }}>
+              {etapaPropriet===1 ? "Informe a palavra-chave para continuar" : "Agora informe seu e-mail e senha"}
+            </div>
+
+            {/* ETAPA 1: Palavra-chave */}
+            {etapaPropriet===1 && (
+              <>
+                <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>🗝️ Palavra-chave</label>
+                <input autoFocus type="password" value={pPalavra} onChange={e=>setPPalavra(e.target.value)} onKeyDown={e=>e.key==="Enter"&&verificarPalavra()} placeholder="••••••" style={iSm} />
+                {pErro && <div style={{ background:"#3a0a0a", border:"2px solid #e74c3c", borderRadius:8, padding:"8px 12px", fontSize:13, color:"#e74c3c", fontWeight:700, marginBottom:12 }}>⚠️ {pErro}</div>}
+                <div style={{ display:"flex", gap:10, marginTop:4 }}>
+                  <button onClick={verificarPalavra} style={{ flex:1, padding:14, borderRadius:12, border:"none", background:"#f59e0b", color:"#12122a", fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Continuar →</button>
+                  <button onClick={fecharModal} style={{ padding:"14px 18px", borderRadius:12, border:"2px solid #2a2a5a", background:"transparent", color:"#aaa", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>✕</button>
+                </div>
+              </>
+            )}
+
+            {/* ETAPA 2: E-mail + Senha */}
+            {etapaPropriet===2 && (
+              <>
+                <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>📧 E-mail</label>
+                <input autoFocus type="email" value={pEmail} onChange={e=>setPEmail(e.target.value)} placeholder="seu@email.com" style={iSm} />
+                <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>🔒 Senha</label>
+                <input type="password" value={pSenha} onChange={e=>setPSenha(e.target.value)} onKeyDown={e=>e.key==="Enter"&&entrarPropriet()} placeholder="••••••" style={iSm} />
+                {pErro && <div style={{ background:"#3a0a0a", border:"2px solid #e74c3c", borderRadius:8, padding:"8px 12px", fontSize:13, color:"#e74c3c", fontWeight:700, marginBottom:12 }}>⚠️ {pErro}</div>}
+                <div style={{ display:"flex", gap:10, marginTop:4 }}>
+                  <button onClick={entrarPropriet} style={{ flex:1, padding:14, borderRadius:12, border:"none", background:"#f59e0b", color:"#12122a", fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Entrar</button>
+                  <button onClick={()=>{ setEtapaPropriet(1); setPEmail(""); setPSenha(""); setPErro(""); }} style={{ padding:"14px 18px", borderRadius:12, border:"2px solid #2a2a5a", background:"transparent", color:"#aaa", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>← Voltar</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── TELA ESCOLA ───────────────────────────────────────────────────────────────
+function TelaEscola({ usuario, comunicados, setComunicados, mensagens, setMensagens, alunos, setAlunos, presencas, onSair, th, themeKey, onChangeTheme }) {
+  const [aba, setAba]                   = useState("avisos");
+  const [paiSelecionado, setPaiSel]     = useState(null);
+
+  const naoLidas = alunos.reduce((acc, pai) => acc + (mensagens[pai.id]||[]).filter(m=>m.de==="pai"&&!m.lida).length, 0);
+
+  const ABAS = [
+    { key:"avisos",    label:"📣 Avisos"   },
+    { key:"msgs",      label:"💬 Msgs",  badge: naoLidas },
+    { key:"novo",      label:"✏️ Novo"    },
+    { key:"alunos",    label:"👨‍👩‍👧 Alunos"  },
+    { key:"presencas", label:"📋 Presenças" },
+  ];
+
+  return (
+    <div style={{ minHeight:"100vh", background:th.bg, fontFamily:"'Nunito',sans-serif", display:"flex", flexDirection:"column" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box}`}</style>
+
+      {/* Header */}
+      <div style={{ background:th.header, padding:"16px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div>
+          <div style={{ fontSize:18, fontWeight:900, color:th.headerText }}>🏫 CETI — Escola</div>
+          <div style={{ fontSize:13, color:th.headerSub }}>Olá, {usuario.nome}</div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <ThemePicker atual={themeKey} onChange={onChangeTheme} />
+          <button onClick={onSair} style={{ background:"rgba(255,255,255,0.2)", border:"none", color:th.headerText, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Sair</button>
+        </div>
+      </div>
+
+      {/* Abas */}
+      <div style={{ display:"flex", background:th.card, borderBottom:`2px solid ${th.cardBorder}` }}>
+        {ABAS.map(a => (
+          <button key={a.key} onClick={() => { setAba(a.key); setPaiSel(null); }} style={{
+            flex:1, padding:"13px 4px", border:"none", background:"none", fontSize:12, fontWeight:700,
+            cursor:"pointer", color:aba===a.key?th.aba:th.textMuted,
+            borderBottom:aba===a.key?`3px solid ${th.aba}`:"3px solid transparent",
+            position:"relative", fontFamily:"'Nunito',sans-serif",
+          }}>
+            {a.label}
+            {(a.badge||0) > 0 && <span style={{ position:"absolute", top:7, right:4, background:th.urgente, color:"#fff", borderRadius:99, fontSize:9, fontWeight:800, padding:"2px 5px" }}>{a.badge}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Conteúdo */}
+      <div style={{ flex:1, overflowY:"auto", padding:16 }}>
+
+        {aba === "avisos" && (
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {comunicados.map(c => <CardAviso key={c.id} aviso={c} mostrarVisibilidade th={th} />)}
+          </div>
+        )}
+
+        {aba === "msgs" && !paiSelecionado && (
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            <div style={{ fontSize:14, color:th.textSub, marginBottom:4 }}>Selecione um responsável:</div>
+            {alunos.map(pai => {
+              const msgs = mensagens[pai.id]||[];
+              const nl = msgs.filter(m=>m.de==="pai"&&!m.lida).length;
+              const ult = msgs[msgs.length-1];
+              return (
+                <button key={pai.id} onClick={() => setPaiSel(pai)} style={{ background:th.card, border:`2px solid ${nl>0?th.aba:th.cardBorder}`, borderRadius:16, padding:"16px 18px", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:14, width:"100%", fontFamily:"'Nunito',sans-serif" }}>
+                  <div style={{ width:46, height:46, borderRadius:"50%", background:th.btnPrimary, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, color:th.btnText, fontWeight:800, flexShrink:0 }}>{pai.nome.charAt(0)}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:15, fontWeight:800, color:th.text }}>{pai.nome}</div>
+                    <div style={{ fontSize:13, color:th.textSub }}>Filho(a): {pai.filho} · Turma {pai.turma}</div>
+                    {ult && <div style={{ fontSize:12, color:th.textMuted, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{ult.texto}</div>}
+                  </div>
+                  {nl > 0 && <div style={{ background:th.urgente, color:"#fff", borderRadius:99, fontSize:12, fontWeight:800, padding:"4px 10px" }}>{nl}</div>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {aba === "msgs" && paiSelecionado && (
+          <ChatEscola pai={paiSelecionado} mensagens={mensagens[paiSelecionado.id]||[]}
+            onEnviar={txt => setMensagens(prev => ({ ...prev, [paiSelecionado.id]: [...(prev[paiSelecionado.id]||[]), { id:Date.now(), de:"escola", texto:txt, data:new Date().toISOString() }] }))}
+            onVoltar={() => setPaiSel(null)} th={th} />
+        )}
+
+        {aba === "novo" && (
+          <NovoAviso alunos={alunos}
+            onSalvar={aviso => { setComunicados(prev => [{ ...aviso, id:Date.now(), autor:usuario.nome, data:new Date().toISOString() }, ...prev]); setAba("avisos"); }}
+            th={th} />
+        )}
+
+        {aba === "alunos" && (
+          <GerenciarAlunos alunos={alunos} setAlunos={setAlunos} th={th} />
+        )}
+
+        {aba === "presencas" && (
+          <AbaPresencas comunicados={comunicados} alunos={alunos} presencas={presencas} th={th} />
+        )}
+
+        {/* Marca d'água */}
+        <div style={{ marginTop:32, paddingTop:16, borderTop:`1px solid ${th.cardBorder}`, textAlign:"center" }}>
+          <div style={{ fontSize:12, color:th.textMuted, fontWeight:700, opacity:0.7 }}>Desenvolvido por</div>
+          <div style={{ fontSize:14, fontWeight:900, color:th.textSub, marginTop:2, opacity:0.8 }}>⚡ Alfa Store — Soluções e Tecnologia</div>
+          <a href="https://wa.me/5592986318382" target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none", display:"inline-flex", alignItems:"center", gap:6, marginTop:8, opacity:0.75 }}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="16" height="16">
+              <circle cx="24" cy="24" r="24" fill="#25d366"/>
+              <path fill="#fff" d="M34.3 13.7A14.9 14.9 0 0 0 24 9.5C16 9.5 9.5 16 9.5 24c0 2.6.7 5.1 2 7.3L9.3 38.5l7.4-1.9a14.9 14.9 0 0 0 7.3 1.9c8 0 14.5-6.5 14.5-14.5 0-3.9-1.5-7.5-4.2-10.3zm-10.3 22.3a12.4 12.4 0 0 1-6.3-1.7l-.4-.3-4.4 1.2 1.2-4.3-.3-.5a12.4 12.4 0 0 1-1.9-6.4c0-6.8 5.6-12.4 12.4-12.4 3.3 0 6.4 1.3 8.7 3.6a12.3 12.3 0 0 1 3.6 8.8c0 6.8-5.5 12.4-12.4 12.4zm6.8-9.3c-.4-.2-2.2-1.1-2.6-1.2-.4-.1-.6-.2-.9.2-.3.4-1 1.2-1.2 1.4-.2.3-.5.3-.9.1-.4-.2-1.6-.6-3-1.8a11 11 0 0 1-2.1-2.5c-.2-.4 0-.6.2-.8l.6-.7.4-.6v-.6l-1.2-2.8c-.3-.7-.6-.6-.9-.6h-.7c-.3 0-.7.1-1 .4-.4.4-1.4 1.3-1.4 3.2s1.4 3.7 1.6 4c.2.2 2.8 4.3 6.8 6 .9.4 1.7.6 2.2.8.9.3 1.8.2 2.4.1.7-.1 2.2-.9 2.5-1.8.3-.9.3-1.6.2-1.8-.1-.2-.4-.3-.8-.5z"/>
+            </svg>
+            <span style={{ fontSize:12, color:"#25d366", fontWeight:700 }}>Suporte: 92 98631-8382</span>
+          </a>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// ── ABA PRESENÇAS ─────────────────────────────────────────────────────────────
+function AbaPresencas({ comunicados, alunos, presencas, th }) {
+  const reunioes = comunicados.filter(c => c.tipo === "reuniao");
+
+  if (reunioes.length === 0) return (
+    <div style={{ textAlign:"center", padding:40, color:th.textMuted, fontSize:15 }}>Nenhuma reunião cadastrada ainda. ✅</div>
+  );
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      {reunioes.map(r => {
+        const respostas = presencas[r.id] || {};
+        const confirmados = alunos.filter(a => respostas[a.id] === "sim");
+        const ausentes    = alunos.filter(a => respostas[a.id] === "nao");
+        const pendentes   = alunos.filter(a => !respostas[a.id]);
+        const total       = alunos.length;
+
+        return (
+          <div key={r.id} style={{ background:th.card, borderRadius:18, padding:20, border:`2px solid ${th.cardBorder}` }}>
+            <div style={{ fontSize:16, fontWeight:900, color:th.text, marginBottom:4 }}>👥 {r.titulo}</div>
+            <div style={{ fontSize:12, color:th.textMuted, marginBottom:16 }}>Enviado por {r.autor}</div>
+
+            {/* Barras de resumo */}
+            <div style={{ display:"flex", gap:10, marginBottom:16 }}>
+              <div style={{ flex:1, background:"#f0fff4", border:"2px solid #27ae60", borderRadius:14, padding:"12px 10px", textAlign:"center" }}>
+                <div style={{ fontSize:28, fontWeight:900, color:"#27ae60" }}>{confirmados.length}</div>
+                <div style={{ fontSize:12, fontWeight:700, color:"#27ae60" }}>✅ Confirmados</div>
+              </div>
+              <div style={{ flex:1, background:"#fff5f5", border:"2px solid #e74c3c", borderRadius:14, padding:"12px 10px", textAlign:"center" }}>
+                <div style={{ fontSize:28, fontWeight:900, color:"#e74c3c" }}>{ausentes.length}</div>
+                <div style={{ fontSize:12, fontWeight:700, color:"#e74c3c" }}>❌ Não vêm</div>
+              </div>
+              <div style={{ flex:1, background:th.badgeBg, border:`2px solid ${th.inputBorder}`, borderRadius:14, padding:"12px 10px", textAlign:"center" }}>
+                <div style={{ fontSize:28, fontWeight:900, color:th.textSub }}>{pendentes.length}</div>
+                <div style={{ fontSize:12, fontWeight:700, color:th.textSub }}>⏳ Pendentes</div>
+              </div>
+            </div>
+
+            {/* Barra de progresso */}
+            <div style={{ background:th.badgeBg, borderRadius:99, height:10, marginBottom:14, overflow:"hidden" }}>
+              <div style={{ width:`${total ? (confirmados.length/total)*100 : 0}%`, background:"#27ae60", height:"100%", borderRadius:99, transition:"width 0.4s" }} />
+            </div>
+            <div style={{ fontSize:12, color:th.textMuted, marginBottom:16, textAlign:"right" }}>{total} responsáveis no total</div>
+
+            {/* Listas */}
+            {confirmados.length > 0 && (
+              <div style={{ marginBottom:12 }}>
+                <div style={{ fontSize:13, fontWeight:800, color:"#27ae60", marginBottom:6 }}>✅ Confirmados</div>
+                {confirmados.map(a => (
+                  <div key={a.id} style={{ fontSize:13, color:th.text, padding:"6px 10px", background:"#f0fff4", borderRadius:8, marginBottom:4 }}>
+                    {a.nome} <span style={{ color:th.textMuted }}>— {a.filho} · Turma {a.turma}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {ausentes.length > 0 && (
+              <div style={{ marginBottom:12 }}>
+                <div style={{ fontSize:13, fontWeight:800, color:"#e74c3c", marginBottom:6 }}>❌ Não poderão comparecer</div>
+                {ausentes.map(a => (
+                  <div key={a.id} style={{ fontSize:13, color:th.text, padding:"6px 10px", background:"#fff5f5", borderRadius:8, marginBottom:4 }}>
+                    {a.nome} <span style={{ color:th.textMuted }}>— {a.filho} · Turma {a.turma}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {pendentes.length > 0 && (
+              <div>
+                <div style={{ fontSize:13, fontWeight:800, color:th.textSub, marginBottom:6 }}>⏳ Aguardando resposta</div>
+                {pendentes.map(a => (
+                  <div key={a.id} style={{ fontSize:13, color:th.textMuted, padding:"6px 10px", background:th.badgeBg, borderRadius:8, marginBottom:4 }}>
+                    {a.nome} <span style={{ color:th.textMuted }}>— {a.filho} · Turma {a.turma}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── GERENCIAR ALUNOS ──────────────────────────────────────────────────────────
+function FormAluno({ inicial, modoNovo, onSalvar, onVoltar, th, turmasExtras, setTurmasExtras }) {
+  const TURMAS_BASE = ["6A","6B","7A","7B","8A","8B","9A","9B"];
+  const [turmasExcluidas, setTurmasExcluidas] = useState([]);
+
+  const todasTurmas = [...TURMAS_BASE.filter(t => !turmasExcluidas.includes(t)), ...turmasExtras];
+
+  const [nomeAluno,   setNomeAluno]   = useState(inicial?.filho   || "");
+  const [turma,       setTurma]       = useState(inicial?.turma   || "");
+  const [nomeResp,    setNomeResp]    = useState(inicial?.nome    || "");
+  const [email,       setEmail]       = useState(inicial?.email   || "");
+  const [celular,     setCelular]     = useState(inicial?.celular  || "");
+  const [celular2,    setCelular2]    = useState(inicial?.celular2 || "");
+  const [senha,       setSenha]       = useState("");
+  const [erro,        setErro]        = useState("");
+  const [novaTurma,      setNovaTurma]      = useState("");
+  const [addingTurma,    setAddingTurma]    = useState(false);
+  const [editingTurma,   setEditingTurma]   = useState(false);
+  const [editNomeAntigo, setEditNomeAntigo] = useState("");
+  const [editNomeNovo,   setEditNomeNovo]   = useState("");
+  const [deletingTurma,  setDeletingTurma]  = useState(false);
+
+  const iS = { width:"100%", padding:"13px 15px", borderRadius:12, border:`2px solid ${th.inputBorder}`, fontSize:15, color:th.inputText, background:th.input, outline:"none", fontFamily:"'Nunito',sans-serif", marginBottom:14 };
+
+  const adicionarTurma = () => {
+    const t = novaTurma.trim().toUpperCase();
+    if (!t) return;
+    if (todasTurmas.includes(t)) { setNovaTurma(""); setAddingTurma(false); setTurma(t); return; }
+    setTurmasExtras(prev => [...prev, t]);
+    setTurma(t);
+    setNovaTurma("");
+    setAddingTurma(false);
+  };
+
+  const editarTurma = () => {
+    const novo = editNomeNovo.trim().toUpperCase();
+    if (!novo) return;
+    const antigo = editNomeAntigo;
+    if (turmasExtras.includes(antigo)) {
+      setTurmasExtras(prev => prev.map(t => t === antigo ? novo : t));
+    } else {
+      // turma base: adiciona a versão editada como extra e marca para substituir visualmente
+      setTurmasExtras(prev => [...prev, novo]);
+    }
+    if (turma === antigo) setTurma(novo);
+    setEditingTurma(false);
+    setEditNomeAntigo("");
+    setEditNomeNovo("");
+  };
+
+  const excluirTurma = (t) => {
+    if (turmasExtras.includes(t)) {
+      setTurmasExtras(prev => prev.filter(x => x !== t));
+    } else {
+      setTurmasExcluidas(prev => [...prev, t]);
+    }
+    if (turma === t) setTurma("");
+    setDeletingTurma(false);
+  };
+
+  const confirmar = async () => {
+    if (!nomeAluno.trim())                   { setErro("Informe o nome do aluno."); return; }
+    if (!turma)                              { setErro("Escolha a turma."); return; }
+    if (!nomeResp.trim())                    { setErro("Informe o nome do responsável."); return; }
+    if (!email.trim()||!email.includes("@")) { setErro("Informe um e-mail válido."); return; }
+    if (modoNovo && !senha.trim())           { setErro("Crie uma senha para o responsável."); return; }
+    // Hash da nova senha (se informada), ou mantém o hash já armazenado
+    const senhaFinal = senha.trim()
+      ? await sha256(senha.trim())
+      : (inicial?.senha || "");
+    onSalvar({ filho:nomeAluno.trim(), turma, nome:nomeResp.trim(), email:email.trim(), celular:celular.trim(), celular2:celular2.trim(), senha:senhaFinal });
+  };
+
+  return (
+    <div style={{ background:th.card, borderRadius:20, padding:20 }}>
+      <button onClick={onVoltar} style={{ background:th.badgeBg, border:"none", color:th.btnPrimary, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:700, cursor:"pointer", marginBottom:18, fontFamily:"'Nunito',sans-serif" }}>← Voltar</button>
+      <div style={{ fontSize:20, fontWeight:900, color:th.text, marginBottom:20 }}>{modoNovo ? "➕ Cadastrar Aluno" : "✏️ Editar Cadastro"}</div>
+
+      {/* Nome do aluno */}
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:6 }}>👦 Nome do Aluno</label>
+      <input value={nomeAluno} onChange={e=>setNomeAluno(e.target.value)} placeholder="Ex: Lucas Silva" style={iS} />
+
+      {/* Turma */}
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:8 }}>🏫 Turma</label>
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
+        {todasTurmas.map(t => (
+          <button key={t} onClick={() => setTurma(t)} style={{ padding:"10px 16px", borderRadius:10, border:`2px solid ${turma===t?th.btnPrimary:th.inputBorder}`, background:turma===t?th.btnPrimary:th.input, color:turma===t?th.btnText:th.text, fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>{t}</button>
+        ))}
+        {/* Botão adicionar nova turma */}
+        {!addingTurma && !editingTurma && !deletingTurma && (
+          <button onClick={()=>setAddingTurma(true)} style={{ padding:"10px 14px", borderRadius:10, border:`2px dashed ${th.inputBorder}`, background:"transparent", color:th.textSub, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>➕ Nova turma</button>
+        )}
+        {/* Botão editar turma */}
+        {!addingTurma && !editingTurma && !deletingTurma && (
+          <button onClick={()=>setEditingTurma(true)} style={{ padding:"10px 14px", borderRadius:10, border:`2px dashed ${th.inputBorder}`, background:"transparent", color:th.textSub, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>✏️ Editar turma</button>
+        )}
+        {/* Botão excluir turma */}
+        {!addingTurma && !editingTurma && !deletingTurma && (
+          <button onClick={()=>setDeletingTurma(true)} style={{ padding:"10px 14px", borderRadius:10, border:`2px dashed ${th.urgente}`, background:"transparent", color:th.urgente, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>🗑️ Excluir turma</button>
+        )}
+      </div>
+      {addingTurma && (
+        <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+          <input value={novaTurma} onChange={e=>setNovaTurma(e.target.value)} onKeyDown={e=>e.key==="Enter"&&adicionarTurma()} placeholder="Ex: 5A ou Maternal" autoFocus style={{ flex:1, padding:"11px 14px", borderRadius:10, border:`2px solid ${th.btnPrimary}`, fontSize:14, color:th.inputText, background:th.input, outline:"none", fontFamily:"'Nunito',sans-serif" }} />
+          <button onClick={adicionarTurma} style={{ background:th.btnPrimary, color:th.btnText, border:"none", borderRadius:10, padding:"11px 16px", fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>OK</button>
+          <button onClick={()=>{ setAddingTurma(false); setNovaTurma(""); }} style={{ background:th.input, color:th.textSub, border:`2px solid ${th.inputBorder}`, borderRadius:10, padding:"11px 14px", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>✕</button>
+        </div>
+      )}
+      {editingTurma && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:th.textSub, marginBottom:8 }}>Qual turma deseja renomear?</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
+            {todasTurmas.map(t => (
+              <button key={t} onClick={()=>{ setEditNomeAntigo(t); setEditNomeNovo(t); }} style={{ padding:"9px 14px", borderRadius:10, border:`2px solid ${editNomeAntigo===t?th.btnPrimary:th.inputBorder}`, background:editNomeAntigo===t?th.btnPrimary:th.input, color:editNomeAntigo===t?th.btnText:th.text, fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>{t}</button>
+            ))}
+          </div>
+          {editNomeAntigo && (
+            <div style={{ display:"flex", gap:8 }}>
+              <input value={editNomeNovo} onChange={e=>setEditNomeNovo(e.target.value)} onKeyDown={e=>e.key==="Enter"&&editarTurma()} placeholder="Novo nome" autoFocus style={{ flex:1, padding:"11px 14px", borderRadius:10, border:`2px solid ${th.btnPrimary}`, fontSize:14, color:th.inputText, background:th.input, outline:"none", fontFamily:"'Nunito',sans-serif" }} />
+              <button onClick={editarTurma} style={{ background:th.btnPrimary, color:th.btnText, border:"none", borderRadius:10, padding:"11px 16px", fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>OK</button>
+              <button onClick={()=>{ setEditingTurma(false); setEditNomeAntigo(""); setEditNomeNovo(""); }} style={{ background:th.input, color:th.textSub, border:`2px solid ${th.inputBorder}`, borderRadius:10, padding:"11px 14px", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>✕</button>
+            </div>
+          )}
+          {!editNomeAntigo && (
+            <button onClick={()=>{ setEditingTurma(false); }} style={{ background:th.input, color:th.textSub, border:`2px solid ${th.inputBorder}`, borderRadius:10, padding:"9px 14px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>✕ Cancelar</button>
+          )}
+        </div>
+      )}
+      {deletingTurma && (
+        <div style={{ marginBottom:16, background:th.urgenteBg, borderRadius:14, padding:"14px 16px" }}>
+          <div style={{ fontSize:13, fontWeight:700, color:th.urgente, marginBottom:8 }}>🗑️ Qual turma deseja excluir?</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:10 }}>
+            {todasTurmas.map(t => (
+              <button key={t} onClick={()=>excluirTurma(t)} style={{ padding:"9px 14px", borderRadius:10, border:`2px solid ${th.urgente}`, background:th.urgenteBg, color:th.urgente, fontSize:14, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>🗑️ {t}</button>
+            ))}
+          </div>
+          <button onClick={()=>setDeletingTurma(false)} style={{ background:th.input, color:th.textSub, border:`2px solid ${th.inputBorder}`, borderRadius:10, padding:"9px 14px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>✕ Cancelar</button>
+        </div>
+      )}
+      {!addingTurma && <div style={{ marginBottom:16 }} />}
+
+      {/* Nome do responsável */}
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:6 }}>👤 Nome do Responsável</label>
+      <input value={nomeResp} onChange={e=>setNomeResp(e.target.value)} placeholder="Ex: João Silva" style={iS} />
+
+      {/* E-mail */}
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:6 }}>📧 E-mail do Responsável</label>
+      <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="Ex: joao@email.com" style={iS} />
+
+      {/* Celular */}
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:6 }}>📱 Celular do Responsável</label>
+      <input type="tel" value={celular} onChange={e=>setCelular(e.target.value)} placeholder="Ex: (92) 99999-0000" style={iS} />
+
+      {/* Celular 2 */}
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:6 }}>📱 Celular do Responsável 2</label>
+      <input type="tel" value={celular2} onChange={e=>setCelular2(e.target.value)} placeholder="Ex: (92) 98888-0000" style={iS} />
+
+      {/* Senha */}
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:6 }}>🔒 {modoNovo ? "Senha de Acesso" : "Nova Senha (deixe em branco para manter)"}</label>
+      <input type="password" value={senha} onChange={e=>setSenha(e.target.value)} placeholder={modoNovo ? "Ex: 01011990" : "Deixe em branco para não alterar"} style={iS} />
+      <div style={{ fontSize:12, color:th.textMuted, marginTop:-10, marginBottom:16 }}>💡 Use algo simples, ex: data de nascimento do aluno</div>
+
+      {erro && <div style={{ background:th.urgenteBg, border:`2px solid ${th.urgente}`, borderRadius:10, padding:"12px 14px", fontSize:14, color:th.urgente, fontWeight:700, marginBottom:16 }}>⚠️ {erro}</div>}
+
+      <button onClick={confirmar} style={{ width:"100%", padding:16, borderRadius:14, border:"none", background:th.btnPrimary, color:th.btnText, fontSize:18, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>
+        ✅ {modoNovo ? "Cadastrar" : "Salvar Alterações"}
+      </button>
+    </div>
+  );
+}
+
+function GerenciarAlunos({ alunos, setAlunos, th }) {
+  const [tela,        setTela]        = useState("lista");
+  const [selecionado, setSelecionado] = useState(null);
+  const [busca,       setBusca]       = useState("");
+  const [excluindo,   setExcluindo]   = useState(null);
+  const [turmasExtras, setTurmasExtras] = useState([]);
+
+  const filtrados = alunos.filter(a =>
+    (a.filho||"").toLowerCase().includes(busca.toLowerCase()) ||
+    (a.nome||"").toLowerCase().includes(busca.toLowerCase())  ||
+    (a.turma||"").toLowerCase().includes(busca.toLowerCase())
+  );
+
+  const salvar = (dados) => {
+    if (tela === "novo") {
+      setAlunos(prev => [...prev, { ...dados, id:"pai_"+Date.now(), tipo:"pai" }]);
+    } else {
+      setAlunos(prev => prev.map(a => a.id===selecionado.id ? { ...a, ...dados } : a));
+    }
+    setTela("lista"); setSelecionado(null);
+  };
+
+  if (tela === "novo" || tela === "editar") {
+    return <FormAluno inicial={selecionado} modoNovo={tela==="novo"} onSalvar={salvar} onVoltar={() => { setTela("lista"); setSelecionado(null); }} th={th} turmasExtras={turmasExtras} setTurmasExtras={setTurmasExtras} />;
+  }
+
+  return (
+    <div>
+      {/* Barra de busca + botão novo */}
+      <div style={{ display:"flex", gap:10, marginBottom:16 }}>
+        <input value={busca} onChange={e=>setBusca(e.target.value)} placeholder="🔍 Buscar aluno ou turma..." style={{ flex:1, padding:"12px 14px", borderRadius:12, border:`2px solid ${th.inputBorder}`, fontSize:14, color:th.inputText, background:th.input, outline:"none", fontFamily:"'Nunito',sans-serif" }} />
+        <button onClick={() => setTela("novo")} style={{ background:th.btnPrimary, color:th.btnText, border:"none", borderRadius:12, padding:"12px 16px", fontSize:14, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap", fontFamily:"'Nunito',sans-serif" }}>➕ Novo</button>
+      </div>
+
+      <div style={{ fontSize:13, color:th.textMuted, marginBottom:12 }}>{filtrados.length} aluno(s) cadastrado(s)</div>
+
+      {/* Modal excluir */}
+      {excluindo && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, padding:20 }}>
+          <div style={{ background:th.card, borderRadius:20, padding:24, maxWidth:340, width:"100%" }}>
+            <div style={{ fontSize:32, textAlign:"center", marginBottom:12 }}>⚠️</div>
+            <div style={{ fontSize:18, fontWeight:800, color:th.text, textAlign:"center", marginBottom:8 }}>Excluir aluno?</div>
+            <div style={{ fontSize:14, color:th.textSub, textAlign:"center", marginBottom:20 }}>
+              <strong>{excluindo.filho}</strong> — Turma {excluindo.turma}<br/>Resp: {excluindo.nome}<br/><br/>Esta ação não pode ser desfeita.
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={() => setExcluindo(null)} style={{ flex:1, padding:14, borderRadius:12, border:`2px solid ${th.inputBorder}`, background:th.input, color:th.text, fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Cancelar</button>
+              <button onClick={() => { setAlunos(prev=>prev.filter(a=>a.id!==excluindo.id)); setExcluindo(null); }} style={{ flex:1, padding:14, borderRadius:12, border:"none", background:th.urgente, color:"#fff", fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lista */}
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {filtrados.length === 0 && (
+          <div style={{ textAlign:"center", padding:40, color:th.textMuted, fontSize:15 }}>Nenhum aluno encontrado.<br/>Toque em <strong>➕ Novo</strong> para cadastrar.</div>
+        )}
+        {filtrados.map(aluno => (
+          <div key={aluno.id} style={{ background:th.card, border:`2px solid ${th.cardBorder}`, borderRadius:16, padding:"14px 16px", display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ width:44, height:44, borderRadius:"50%", background:th.btnPrimary, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, color:th.btnText, fontWeight:800, flexShrink:0 }}>{(aluno.filho||"?").charAt(0)}</div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:16, fontWeight:800, color:th.text }}>{aluno.filho}</div>
+              <div style={{ fontSize:13, color:th.textSub }}>Turma <strong>{aluno.turma}</strong> · Resp: {aluno.nome}</div>
+              <div style={{ fontSize:12, color:th.textMuted }}>{aluno.email}{aluno.celular ? ` · 📱 ${aluno.celular}` : ""}</div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
+              <button onClick={() => { setSelecionado(aluno); setTela("editar"); }} style={{ background:th.badgeBg, border:"none", color:th.btnPrimary, borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>✏️ Editar</button>
+              <button onClick={() => setExcluindo(aluno)} style={{ background:th.urgenteBg, border:"none", color:th.urgente, borderRadius:8, padding:"6px 12px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>🗑️ Excluir</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── NOVO AVISO ────────────────────────────────────────────────────────────────
+function NovoAviso({ onSalvar, alunos, th }) {
+  const TURMAS_OPCOES = ["6A","6B","7A","7B","8A","8B","9A","9B"];
+  const [titulo,       setTitulo]      = useState("");
+  const [corpo,        setCorpo]       = useState("");
+  const [tipo,         setTipo]        = useState("aviso");
+  const [urgente,      setUrgente]     = useState(false);
+  const [visibilidade, setVisib]       = useState("todos");
+  const [turmas,       setTurmas]      = useState([]);
+  const [alunoId,      setAlunoId]     = useState("");
+  const [erro,         setErro]        = useState("");
+
+  const iS = { width:"100%", padding:"14px 16px", borderRadius:12, border:`2px solid ${th.inputBorder}`, fontSize:15, color:th.inputText, background:th.input, outline:"none", fontFamily:"'Nunito',sans-serif" };
+
+  const salvar = () => {
+    if (!titulo.trim()||!corpo.trim())           { setErro("Preencha o título e o texto."); return; }
+    if (visibilidade==="turma"&&turmas.length===0) { setErro("Escolha pelo menos uma turma."); return; }
+    if (visibilidade==="aluno"&&!alunoId)         { setErro("Escolha o aluno."); return; }
+    onSalvar({ titulo:titulo.trim(), corpo:corpo.trim(), tipo, urgente, visibilidade,
+      turmas: visibilidade==="aluno" ? [alunos.find(a=>a.id===alunoId)?.turma].filter(Boolean) : visibilidade==="turma" ? turmas : TURMAS_OPCOES,
+      alunoId: visibilidade==="aluno" ? alunoId : null });
+  };
+
+  return (
+    <div style={{ background:th.card, borderRadius:20, padding:20 }}>
+      <div style={{ fontSize:20, fontWeight:900, color:th.text, marginBottom:20 }}>✏️ Escrever Novo Aviso</div>
+
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:6 }}>Título</label>
+      <input value={titulo} onChange={e=>setTitulo(e.target.value)} placeholder="Ex: Reunião de pais dia 28" style={{ ...iS, marginBottom:16 }} />
+
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:6 }}>Texto do Aviso</label>
+      <textarea value={corpo} onChange={e=>setCorpo(e.target.value)} placeholder="Escreva o recado completo..." rows={5} style={{ ...iS, resize:"vertical", marginBottom:16 }} />
+
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:8 }}>Tipo</label>
+      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
+        {Object.entries(COR_TIPO).map(([k,v]) => (
+          <button key={k} onClick={()=>setTipo(k)} style={{ padding:"10px 16px", borderRadius:10, border:`2px solid ${tipo===k?v.cor:th.inputBorder}`, background:tipo===k?v.cor+"18":th.input, color:tipo===k?v.cor:th.textSub, fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>{v.emoji} {v.label}</button>
+        ))}
+      </div>
+
+      <div onClick={()=>setUrgente(!urgente)} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, background:th.urgenteBg, borderRadius:12, padding:"12px 16px", cursor:"pointer" }}>
+        <div style={{ width:50, height:28, borderRadius:99, background:urgente?th.urgente:th.inputBorder, position:"relative", transition:"background 0.2s", flexShrink:0 }}>
+          <div style={{ width:22, height:22, borderRadius:"50%", background:"#fff", position:"absolute", top:3, left:urgente?25:3, transition:"left 0.2s", boxShadow:"0 1px 4px #0003" }} />
+        </div>
+        <div>
+          <div style={{ fontSize:14, fontWeight:800, color:th.urgente }}>⚡ Marcar como Urgente</div>
+          <div style={{ fontSize:12, color:th.textSub }}>O aviso vai aparecer em destaque</div>
+        </div>
+      </div>
+
+      <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:8 }}>Quem vai ver?</label>
+      <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+        {[{key:"todos",emoji:"🌍",label:"Todos os pais",desc:"Todos os responsáveis vão ver"},
+          {key:"turma",emoji:"🏫",label:"Só uma turma",desc:"Apenas os pais da turma escolhida"},
+          {key:"aluno",emoji:"👤",label:"Só um aluno",desc:"Apenas o responsável pelo aluno"}].map(op => (
+          <button key={op.key} onClick={()=>setVisib(op.key)} style={{ padding:"14px 16px", borderRadius:14, border:`2px solid ${visibilidade===op.key?th.btnPrimary:th.inputBorder}`, background:visibilidade===op.key?th.badgeBg:th.input, textAlign:"left", cursor:"pointer", fontFamily:"'Nunito',sans-serif", width:"100%" }}>
+            <div style={{ fontSize:15, fontWeight:800, color:visibilidade===op.key?th.btnPrimary:th.text }}>{op.emoji} {op.label}</div>
+            <div style={{ fontSize:12, color:th.textSub, marginTop:2 }}>{op.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      {visibilidade==="turma" && (
+        <div style={{ marginBottom:16 }}>
+          <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:8 }}>Qual turma?</label>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {TURMAS_OPCOES.map(t => (
+              <button key={t} onClick={()=>setTurmas(prev=>prev.includes(t)?prev.filter(x=>x!==t):[...prev,t])} style={{ padding:"10px 18px", borderRadius:10, border:`2px solid ${turmas.includes(t)?th.btnPrimary:th.inputBorder}`, background:turmas.includes(t)?th.btnPrimary:th.input, color:turmas.includes(t)?th.btnText:th.text, fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>{t}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {visibilidade==="aluno" && (
+        <div style={{ marginBottom:16 }}>
+          <label style={{ display:"block", fontSize:14, fontWeight:700, color:th.text, marginBottom:8 }}>Qual aluno?</label>
+          <select value={alunoId} onChange={e=>setAlunoId(e.target.value)} style={{ ...iS }}>
+            <option value="">Escolha o aluno...</option>
+            {alunos.map(a => <option key={a.id} value={a.id}>{a.filho} — Turma {a.turma}</option>)}
+          </select>
+        </div>
+      )}
+
+      {erro && <div style={{ background:th.urgenteBg, border:`2px solid ${th.urgente}`, borderRadius:10, padding:"12px 16px", fontSize:14, color:th.urgente, fontWeight:700, marginBottom:16 }}>⚠️ {erro}</div>}
+
+      <button onClick={salvar} style={{ width:"100%", padding:16, borderRadius:14, border:"none", background:th.btnPrimary, color:th.btnText, fontSize:18, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif", marginTop:4 }}>📤 Enviar Aviso</button>
+    </div>
+  );
+}
+
+// ── CHAT ESCOLA ───────────────────────────────────────────────────────────────
+function ChatEscola({ pai, mensagens, onEnviar, onVoltar, th }) {
+  const [texto, setTexto] = useState("");
+  const fimRef = useRef(null);
+  useEffect(() => { fimRef.current?.scrollIntoView({ behavior:"smooth" }); }, [mensagens]);
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 160px)" }}>
+      <button onClick={onVoltar} style={{ background:th.badgeBg, border:"none", color:th.btnPrimary, borderRadius:10, padding:"10px 16px", fontSize:14, fontWeight:700, cursor:"pointer", marginBottom:12, alignSelf:"flex-start", fontFamily:"'Nunito',sans-serif" }}>← Voltar</button>
+      <div style={{ background:th.header, borderRadius:14, padding:"14px 18px", marginBottom:12 }}>
+        <div style={{ fontSize:16, fontWeight:800, color:th.headerText }}>{pai.nome}</div>
+        <div style={{ fontSize:13, color:th.headerSub }}>Filho(a): {pai.filho} · Turma {pai.turma}</div>
+      </div>
+      <BolhasChat mensagens={mensagens} ladoDireito="escola" fimRef={fimRef} th={th} />
+      <InputChat texto={texto} setTexto={setTexto} onEnviar={() => { if(texto.trim()){ onEnviar(texto.trim()); setTexto(""); } }} th={th} />
+    </div>
+  );
+}
+
+// ── TELA PAI ──────────────────────────────────────────────────────────────────
+function TelaPai({ usuario, comunicados, mensagens, setMensagens, presencas, setPresencas, onSair, th, themeKey, onChangeTheme }) {
+  const [tela,        setTela]        = useState("inicio");
+  const [avisosLendo, setAvisosLendo] = useState(null);
+
+  const meusAvisos = comunicados.filter(c => {
+    if (c.visibilidade==="todos") return true;
+    if (c.visibilidade==="turma") return c.turmas.includes(usuario.turma);
+    if (c.visibilidade==="aluno") return c.alunoId===usuario.id;
+    return false;
+  });
+  const urgentes = meusAvisos.filter(c=>c.urgente);
+  const minhasMsgs = mensagens[usuario.id]||[];
+
+  const Header = ({ titulo, sub, onVoltar }) => (
+    <div style={{ background:th.header, padding:"20px 20px 24px" }}>
+      {onVoltar && <button onClick={onVoltar} style={{ background:"rgba(255,255,255,0.2)", border:"none", color:th.headerText, borderRadius:10, padding:"8px 14px", fontSize:14, fontWeight:700, cursor:"pointer", marginBottom:12, fontFamily:"'Nunito',sans-serif" }}>← Voltar</button>}
+      {!onVoltar && (
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4 }}>
+          <div/>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <ThemePicker atual={themeKey} onChange={onChangeTheme} />
+            <button onClick={onSair} style={{ background:"rgba(255,255,255,0.2)", border:"none", color:th.headerText, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Sair</button>
+          </div>
+        </div>
+      )}
+      <div style={{ fontSize:22, fontWeight:900, color:th.headerText }}>{titulo}</div>
+      {sub && <div style={{ fontSize:13, color:th.headerSub, marginTop:2 }}>{sub}</div>}
+    </div>
+  );
+
+  if (tela==="inicio") return (
+    <div style={{ minHeight:"100vh", background:th.bg, fontFamily:"'Nunito',sans-serif" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box}`}</style>
+      <div style={{ background:th.header, padding:"24px 20px 28px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <div>
+            <div style={{ fontSize:14, color:th.headerSub }}>Olá,</div>
+            <div style={{ fontSize:26, fontWeight:900, color:th.headerText }}>{usuario.nome} 👋</div>
+            <div style={{ fontSize:14, color:th.headerSub, marginTop:4 }}>Filho(a): <strong style={{ color:th.headerText }}>{usuario.filho}</strong> · Turma {usuario.turma}</div>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <ThemePicker atual={themeKey} onChange={onChangeTheme} />
+            <button onClick={onSair} style={{ background:"rgba(255,255,255,0.2)", border:"none", color:th.headerText, borderRadius:10, padding:"8px 14px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Sair</button>
+          </div>
+        </div>
+      </div>
+      <div style={{ padding:16 }}>
+        {urgentes.length>0 && (
+          <div onClick={()=>{ setAvisosLendo(urgentes[0]); setTela("lendo"); }} style={{ background:th.urgenteBg, border:`3px solid ${th.urgente}`, borderRadius:18, padding:"16px 18px", marginBottom:16, cursor:"pointer", display:"flex", alignItems:"center", gap:14 }}>
+            <div style={{ fontSize:36 }}>⚡</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:800, color:th.urgente }}>AVISO URGENTE</div>
+              <div style={{ fontSize:15, fontWeight:700, color:th.text, marginTop:2 }}>{urgentes[0].titulo}</div>
+              <div style={{ fontSize:12, color:th.textSub }}>Toque para ler</div>
+            </div>
+            <div style={{ fontSize:24, color:th.urgente }}>›</div>
+          </div>
+        )}
+        {[{icon:"📣",title:"Avisos da Escola",desc:`${meusAvisos.length} aviso(s) para você`,tela:"avisos"},
+          {icon:"💬",title:"Falar com a Escola",desc:"Mande uma mensagem",tela:"chat"}].map(item=>(
+          <button key={item.tela} onClick={()=>setTela(item.tela)} style={{ background:th.card, border:`2px solid ${th.cardBorder}`, borderRadius:20, padding:"22px 20px", cursor:"pointer", display:"flex", alignItems:"center", gap:16, fontFamily:"'Nunito',sans-serif", textAlign:"left", width:"100%", boxShadow:"0 2px 8px rgba(0,0,0,0.06)", marginBottom:14 }}>
+            <div style={{ width:60, height:60, borderRadius:16, background:th.badgeBg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:32, flexShrink:0 }}>{item.icon}</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:20, fontWeight:800, color:th.text }}>{item.title}</div>
+              <div style={{ fontSize:14, color:th.textSub, marginTop:3 }}>{item.desc}</div>
+            </div>
+            <div style={{ fontSize:28, color:th.textMuted }}>›</div>
+          </button>
+        ))}
+        <a href="https://wa.me/5592992767068" target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none" }}>
+          <div style={{ background:"#25d366", borderRadius:16, padding:"14px 18px", textAlign:"center", cursor:"pointer" }}>
+            <div style={{ fontSize:13, color:"#fff", opacity:0.9 }}>Em caso de dúvidas, fale com a escola:</div>
+            <div style={{ fontSize:20, fontWeight:900, color:"#fff", marginTop:4 }}>💬 (92) 99276-7068</div>
+            <div style={{ fontSize:12, color:"#fff", opacity:0.85, marginTop:2 }}>Toque para abrir o WhatsApp</div>
+          </div>
+        </a>
+
+        {/* Marca d'água */}
+        <div style={{ marginTop:28, paddingTop:16, borderTop:`1px solid ${th.cardBorder}`, textAlign:"center" }}>
+          <div style={{ fontSize:12, color:th.textMuted, fontWeight:700, opacity:0.7 }}>Desenvolvido por</div>
+          <div style={{ fontSize:14, fontWeight:900, color:th.textSub, marginTop:2, opacity:0.8 }}>⚡ Alfa Store — Soluções e Tecnologia</div>
+          <a href="https://wa.me/5592986318382" target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none", display:"inline-flex", alignItems:"center", gap:6, marginTop:8, opacity:0.75 }}>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="16" height="16">
+              <circle cx="24" cy="24" r="24" fill="#25d366"/>
+              <path fill="#fff" d="M34.3 13.7A14.9 14.9 0 0 0 24 9.5C16 9.5 9.5 16 9.5 24c0 2.6.7 5.1 2 7.3L9.3 38.5l7.4-1.9a14.9 14.9 0 0 0 7.3 1.9c8 0 14.5-6.5 14.5-14.5 0-3.9-1.5-7.5-4.2-10.3zm-10.3 22.3a12.4 12.4 0 0 1-6.3-1.7l-.4-.3-4.4 1.2 1.2-4.3-.3-.5a12.4 12.4 0 0 1-1.9-6.4c0-6.8 5.6-12.4 12.4-12.4 3.3 0 6.4 1.3 8.7 3.6a12.3 12.3 0 0 1 3.6 8.8c0 6.8-5.5 12.4-12.4 12.4zm6.8-9.3c-.4-.2-2.2-1.1-2.6-1.2-.4-.1-.6-.2-.9.2-.3.4-1 1.2-1.2 1.4-.2.3-.5.3-.9.1-.4-.2-1.6-.6-3-1.8a11 11 0 0 1-2.1-2.5c-.2-.4 0-.6.2-.8l.6-.7.4-.6v-.6l-1.2-2.8c-.3-.7-.6-.6-.9-.6h-.7c-.3 0-.7.1-1 .4-.4.4-1.4 1.3-1.4 3.2s1.4 3.7 1.6 4c.2.2 2.8 4.3 6.8 6 .9.4 1.7.6 2.2.8.9.3 1.8.2 2.4.1.7-.1 2.2-.9 2.5-1.8.3-.9.3-1.6.2-1.8-.1-.2-.4-.3-.8-.5z"/>
+            </svg>
+            <span style={{ fontSize:12, color:"#25d366", fontWeight:700 }}>Suporte: 92 98631-8382</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (tela==="avisos") return (
+    <div style={{ minHeight:"100vh", background:th.bg, fontFamily:"'Nunito',sans-serif" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box}`}</style>
+      <Header titulo="📣 Avisos da Escola" sub={`Turma ${usuario.turma} · ${usuario.filho}`} onVoltar={()=>setTela("inicio")} />
+      <div style={{ padding:16, display:"flex", flexDirection:"column", gap:12 }}>
+        {meusAvisos.length===0 && <div style={{ textAlign:"center", padding:40, color:th.textMuted }}>Nenhum aviso por enquanto. ✅</div>}
+        {meusAvisos.map(c => <CardAviso key={c.id} aviso={c} onClick={()=>{ setAvisosLendo(c); setTela("lendo"); }} th={th} />)}
+      </div>
+    </div>
+  );
+
+  if (tela==="lendo"&&avisosLendo) return (
+    <div style={{ minHeight:"100vh", background:th.bg, fontFamily:"'Nunito',sans-serif", display:"flex", flexDirection:"column" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box}`}</style>
+      <div style={{ background:th.header, padding:"20px 20px 28px" }}>
+        <button onClick={()=>setTela("avisos")} style={{ background:"rgba(255,255,255,0.2)", border:"none", color:th.headerText, borderRadius:10, padding:"8px 14px", fontSize:14, fontWeight:700, cursor:"pointer", marginBottom:14, fontFamily:"'Nunito',sans-serif" }}>← Voltar</button>
+        {avisosLendo.urgente && <div style={{ fontSize:12, fontWeight:800, color:th.headerSub, marginBottom:6 }}>⚡ URGENTE</div>}
+        <div style={{ fontSize:22, fontWeight:900, color:th.headerText, lineHeight:1.3 }}>{avisosLendo.titulo}</div>
+        <div style={{ fontSize:13, color:th.headerSub, marginTop:8 }}>Enviado por {avisosLendo.autor} · {tempoAtras(avisosLendo.data)}</div>
+      </div>
+      <div style={{ flex:1, padding:"24px 20px" }}>
+        <div style={{ background:th.card, borderRadius:18, padding:20, fontSize:16, color:th.text, lineHeight:1.9, whiteSpace:"pre-line", marginBottom:20, border:`1px solid ${th.cardBorder}` }}>{avisosLendo.corpo}</div>
+        {avisosLendo.tipo==="reuniao" && (() => {
+          const respostaAtual = (presencas[avisosLendo.id]||{})[usuario.id];
+          const confirmar = () => setPresencas(prev => ({ ...prev, [avisosLendo.id]: { ...(prev[avisosLendo.id]||{}), [usuario.id]:"sim" } }));
+          const recusar   = () => setPresencas(prev => ({ ...prev, [avisosLendo.id]: { ...(prev[avisosLendo.id]||{}), [usuario.id]:"nao" } }));
+          return (
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:th.textSub, marginBottom:8, textAlign:"center" }}>Sua presença na reunião:</div>
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={confirmar} style={{ flex:1, padding:14, borderRadius:14, border:`3px solid ${respostaAtual==="sim"?"#27ae60":"#c8e6c9"}`, background:respostaAtual==="sim"?"#27ae60":"#f0fff4", color:respostaAtual==="sim"?"#fff":"#27ae60", fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif", transition:"all 0.2s" }}>
+                  ✅ Confirmar presença
+                </button>
+                <button onClick={recusar} style={{ flex:1, padding:14, borderRadius:14, border:`3px solid ${respostaAtual==="nao"?"#e74c3c":"#ffcdd2"}`, background:respostaAtual==="nao"?"#e74c3c":"#fff5f5", color:respostaAtual==="nao"?"#fff":"#e74c3c", fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif", transition:"all 0.2s" }}>
+                  ❌ Não poderei comparecer
+                </button>
+              </div>
+              {respostaAtual && (
+                <div style={{ marginTop:10, textAlign:"center", fontSize:13, fontWeight:700, color:respostaAtual==="sim"?"#27ae60":"#e74c3c", background:respostaAtual==="sim"?"#f0fff4":"#fff5f5", borderRadius:10, padding:"8px 14px" }}>
+                  {respostaAtual==="sim" ? "✅ Presença confirmada! Até lá 😊" : "❌ Resposta registrada. Obrigado por avisar!"}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        <button onClick={()=>setTela("chat")} style={{ width:"100%", padding:14, background:th.card, border:`2px solid ${th.cardBorder}`, borderRadius:16, fontSize:16, fontWeight:700, color:th.text, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>💬 Tenho uma dúvida</button>
+      </div>
+    </div>
+  );
+
+  if (tela==="chat") return (
+    <div style={{ minHeight:"100vh", background:th.bg, fontFamily:"'Nunito',sans-serif", display:"flex", flexDirection:"column" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box}`}</style>
+      <Header titulo="💬 Falar com a Escola" sub="Respondemos em até 1 dia útil" onVoltar={()=>setTela("inicio")} />
+      <ChatPai mensagens={minhasMsgs} onEnviar={txt => setMensagens(prev=>({ ...prev, [usuario.id]:[...(prev[usuario.id]||[]),{ id:Date.now(), de:"pai", texto:txt, data:new Date().toISOString() }] }))} th={th} />
+    </div>
+  );
+
+  return null;
+}
+
+// ── CHAT PAI ──────────────────────────────────────────────────────────────────
+function ChatPai({ mensagens, onEnviar, th }) {
+  const [texto, setTexto] = useState("");
+  const fimRef = useRef(null);
+  useEffect(() => { fimRef.current?.scrollIntoView({ behavior:"smooth" }); }, [mensagens]);
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", height:"calc(100vh - 130px)" }}>
+      <BolhasChat mensagens={mensagens} ladoDireito="pai" fimRef={fimRef} th={th} />
+      <InputChat texto={texto} setTexto={setTexto} onEnviar={()=>{ if(texto.trim()){ onEnviar(texto.trim()); setTexto(""); } }} th={th} />
+    </div>
+  );
+}
+
+function formatDataHora(dateStr) {
+  const d = new Date(dateStr);
+  const hoje = new Date();
+  const ontem = new Date(); ontem.setDate(hoje.getDate()-1);
+  const hora = d.toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" });
+  if (d.toDateString() === hoje.toDateString()) return `Hoje às ${hora}`;
+  if (d.toDateString() === ontem.toDateString()) return `Ontem às ${hora}`;
+  return d.toLocaleDateString("pt-BR", { day:"2-digit", month:"2-digit", year:"numeric" }) + ` às ${hora}`;
+}
+
+// ── COMPONENTES COMUNS ────────────────────────────────────────────────────────
+function BolhasChat({ mensagens, ladoDireito, fimRef, th }) {
+  return (
+    <div style={{ flex:1, overflowY:"auto", padding:16, display:"flex", flexDirection:"column", gap:12 }}>
+      {mensagens.length===0 && <div style={{ textAlign:"center", color:th.textMuted, padding:40, fontSize:15 }}>Nenhuma mensagem ainda.<br/>Escreva abaixo para começar! 👇</div>}
+      {mensagens.map(m => {
+        const isMeu = m.de===ladoDireito;
+        return (
+          <div key={m.id} style={{ display:"flex", flexDirection:"column", alignItems:isMeu?"flex-end":"flex-start" }}>
+            {!isMeu && <div style={{ fontSize:12, color:th.textMuted, marginBottom:4, paddingLeft:4, fontWeight:700 }}>🏫 Escola</div>}
+            <div style={{ maxWidth:"80%", padding:"14px 18px", borderRadius:isMeu?"18px 18px 4px 18px":"18px 18px 18px 4px", background:isMeu?th.btnPrimary:th.card, color:isMeu?th.btnText:th.text, fontSize:15, lineHeight:1.6, border:isMeu?"none":`2px solid ${th.cardBorder}`, boxShadow:"0 1px 4px rgba(0,0,0,0.07)", fontFamily:"'Nunito',sans-serif" }}>{m.texto}</div>
+            <div style={{ fontSize:11, color:th.textMuted, marginTop:4 }}>{formatDataHora(m.data)}</div>
+          </div>
+        );
+      })}
+      <div ref={fimRef} />
+    </div>
+  );
+}
+
+function InputChat({ texto, setTexto, onEnviar, th }) {
+  return (
+    <div style={{ padding:"12px 16px 20px", borderTop:`2px solid ${th.cardBorder}`, background:th.card }}>
+      <div style={{ display:"flex", gap:10, alignItems:"flex-end" }}>
+        <textarea value={texto} onChange={e=>setTexto(e.target.value)} onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); onEnviar(); } }} placeholder="Escreva sua mensagem aqui..." rows={2} style={{ flex:1, padding:14, borderRadius:14, border:`2px solid ${th.inputBorder}`, fontSize:15, color:th.inputText, fontFamily:"'Nunito',sans-serif", background:th.input, resize:"none", outline:"none", lineHeight:1.5 }} />
+        <button onClick={onEnviar} style={{ background:th.btnPrimary, border:"none", color:th.btnText, width:48, height:48, borderRadius:14, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>↑</button>
+      </div>
+    </div>
+  );
+}
+
+function CardAviso({ aviso, onClick, mostrarVisibilidade, th }) {
+  const cfg = COR_TIPO[aviso.tipo]||COR_TIPO.aviso;
+  const VLABEL = { todos:"🌍 Todos", turma:`🏫 Turma ${aviso.turmas?.join(", ")}`, aluno:"👤 Só este aluno" };
+  return (
+    <div onClick={onClick} style={{ background:th.card, border:`2px solid ${aviso.urgente?th.urgente:th.cardBorder}`, borderRadius:18, padding:"16px 18px", cursor:onClick?"pointer":"default", display:"flex", alignItems:"center", gap:14, boxShadow:aviso.urgente?`0 2px 12px ${th.urgente}22`:"0 1px 4px rgba(0,0,0,0.05)" }}>
+      <div style={{ width:52, height:52, borderRadius:14, background:cfg.cor+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:26, flexShrink:0 }}>{cfg.emoji}</div>
+      <div style={{ flex:1, minWidth:0 }}>
+        {aviso.urgente && <div style={{ fontSize:11, fontWeight:800, color:th.urgente, marginBottom:2 }}>⚡ URGENTE</div>}
+        <div style={{ fontSize:16, fontWeight:700, color:th.text, lineHeight:1.3 }}>{aviso.titulo}</div>
+        <div style={{ fontSize:13, color:th.textSub, marginTop:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{aviso.corpo.split("\n")[0]}</div>
+        <div style={{ fontSize:12, color:th.textMuted, marginTop:6 }}>
+          {aviso.autor} · {tempoAtras(aviso.data)}
+          {mostrarVisibilidade && <span style={{ marginLeft:10, background:th.badgeBg, borderRadius:99, padding:"2px 8px", color:th.badgeText, fontWeight:700 }}>{VLABEL[aviso.visibilidade]}</span>}
+        </div>
+      </div>
+      {onClick && <div style={{ fontSize:22, color:th.textMuted, flexShrink:0 }}>›</div>}
+    </div>
+  );
+}
+
+// ── TELA BLOQUEADA ────────────────────────────────────────────────────────────
+function TelaBloqueada({ whatsEscola, telEscola, onDesbloquear }) {
+  const [modalPropriet, setModalPropriet] = useState(false);
+  const [etapa,         setEtapa]         = useState(1);
+  const [pPalavra,      setPPalavra]      = useState("");
+  const [pEmail,        setPEmail]        = useState("");
+  const [pSenha,        setPSenha]        = useState("");
+  const [pErro,         setPErro]         = useState("");
+
+  // Credenciais do proprietário — SHA-256 (mesmos hashes de TelaLogin)
+  const PROPRIETARIO = {
+    email: "escola@gmail.com",
+    senhaHash: "94f91d251f7f2ea8679e29f2dae78ab5fc066713a4fd499e075e0a542421068a",
+    palavraChaveHash: "d3ecc5b7fe38ffd3397473362f2c42321fb82deb23083ed13cf6f20320ab6c92",
+  };
+
+  const verificarPalavra = async () => {
+    const hash = await sha256(pPalavra.trim().toLowerCase());
+    if (hash !== PROPRIETARIO.palavraChaveHash) { setPErro("Palavra-chave incorreta."); return; }
+    setEtapa(2); setPErro("");
+  };
+
+  const entrar = async () => {
+    if (pEmail.trim().toLowerCase() !== PROPRIETARIO.email.toLowerCase()) { setPErro("E-mail incorreto."); return; }
+    const hash = await sha256(pSenha);
+    if (hash !== PROPRIETARIO.senhaHash) { setPErro("Senha incorreta."); return; }
+    setModalPropriet(false);
+    onDesbloquear();
+  };
+
+  const fechar = () => { setModalPropriet(false); setEtapa(1); setPPalavra(""); setPEmail(""); setPSenha(""); setPErro(""); };
+
+  const iSm = { width:"100%", padding:"12px 14px", borderRadius:10, border:"2px solid #334", fontSize:14, color:"#eee", background:"#1a1a2e", outline:"none", fontFamily:"'Nunito',sans-serif", marginBottom:12 };
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#0d1117", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:24, fontFamily:"'Nunito',sans-serif", position:"relative" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box}`}</style>
+
+      {/* Ícone oculto proprietário — canto superior esquerdo */}
+      <div
+        onClick={() => {
+          if (!window._blqClicks) window._blqClicks = 0;
+          window._blqClicks++;
+          clearTimeout(window._blqTimer);
+          if (window._blqClicks >= 2) { window._blqClicks = 0; setModalPropriet(true); }
+          else { window._blqTimer = setTimeout(() => { window._blqClicks = 0; }, 600); }
+        }}
+        style={{ position:"absolute", top:16, left:16, width:44, height:44, cursor:"default", opacity:0.01, userSelect:"none", zIndex:100 }}
+      />
+
+      {/* Triângulo de aviso */}
+      <svg viewBox="0 0 100 90" width="90" style={{ marginBottom:24 }}>
+        <polygon points="50,5 95,85 5,85" fill="#f59e0b" stroke="#1a1a1a" strokeWidth="4" strokeLinejoin="round"/>
+        <text x="50" y="72" textAnchor="middle" fontSize="52" fontWeight="900" fill="#1a1a1a">!</text>
+      </svg>
+
+      <div style={{ fontSize:32, fontWeight:900, color:"#fff", marginBottom:16, textAlign:"center" }}>Assinatura expirada</div>
+
+      <div style={{ fontSize:16, color:"#aaa", textAlign:"center", maxWidth:340, lineHeight:1.7, marginBottom:32 }}>
+        Sua assinatura do <strong style={{ color:"#fff" }}>SaaS</strong>{" "}
+        <span style={{ fontSize:14 }}>(Software as a Service – Software como Serviço)</span>{" "}
+        precisa ser renovada para continuar usando o aplicativo.
+      </div>
+
+      <a href="https://wa.me/5592986318382" target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none", display:"flex", alignItems:"center", gap:12, marginBottom:32 }}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="44" height="44">
+          <circle cx="24" cy="24" r="24" fill="#25d366"/>
+          <path fill="#fff" d="M34.3 13.7A14.9 14.9 0 0 0 24 9.5C16 9.5 9.5 16 9.5 24c0 2.6.7 5.1 2 7.3L9.3 38.5l7.4-1.9a14.9 14.9 0 0 0 7.3 1.9c8 0 14.5-6.5 14.5-14.5 0-3.9-1.5-7.5-4.2-10.3zm-10.3 22.3a12.4 12.4 0 0 1-6.3-1.7l-.4-.3-4.4 1.2 1.2-4.3-.3-.5a12.4 12.4 0 0 1-1.9-6.4c0-6.8 5.6-12.4 12.4-12.4 3.3 0 6.4 1.3 8.7 3.6a12.3 12.3 0 0 1 3.6 8.8c0 6.8-5.5 12.4-12.4 12.4zm6.8-9.3c-.4-.2-2.2-1.1-2.6-1.2-.4-.1-.6-.2-.9.2-.3.4-1 1.2-1.2 1.4-.2.3-.5.3-.9.1-.4-.2-1.6-.6-3-1.8a11 11 0 0 1-2.1-2.5c-.2-.4 0-.6.2-.8l.6-.7.4-.6v-.6l-1.2-2.8c-.3-.7-.6-.6-.9-.6h-.7c-.3 0-.7.1-1 .4-.4.4-1.4 1.3-1.4 3.2s1.4 3.7 1.6 4c.2.2 2.8 4.3 6.8 6 .9.4 1.7.6 2.2.8.9.3 1.8.2 2.4.1.7-.1 2.2-.9 2.5-1.8.3-.9.3-1.6.2-1.8-.1-.2-.4-.3-.8-.5z"/>
+        </svg>
+        <div>
+          <div style={{ fontSize:14, color:"#aaa", fontWeight:600 }}>Fale com o suporte:</div>
+          <div style={{ fontSize:22, fontWeight:900, color:"#fff" }}>92 98631-8382</div>
+        </div>
+      </a>
+
+      <a href="https://wa.me/5592986318382" target="_blank" rel="noopener noreferrer" style={{ textDecoration:"none", width:"100%", maxWidth:360 }}>
+        <div style={{ background:"linear-gradient(135deg,#1565c0,#1e88e5)", borderRadius:16, padding:"18px 24px", textAlign:"center", fontSize:18, fontWeight:900, color:"#fff", letterSpacing:1, boxShadow:"0 4px 20px rgba(30,136,229,0.4)", cursor:"pointer" }}>
+          REGULARIZAR E CONTINUAR
+        </div>
+      </a>
+
+      {/* Modal proprietário */}
+      {modalPropriet && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.9)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9999, padding:20 }}>
+          <div style={{ background:"#12122a", borderRadius:20, padding:28, width:"100%", maxWidth:360, boxShadow:"0 8px 40px rgba(0,0,0,0.6)", border:"2px solid #2a2a5a" }}>
+            <div style={{ fontSize:22, fontWeight:900, color:"#f59e0b", marginBottom:4 }}>🔐 Acesso Proprietário</div>
+            <div style={{ fontSize:13, color:"#8888bb", marginBottom:20 }}>
+              {etapa===1 ? "Informe a palavra-chave para continuar" : "Agora informe seu e-mail e senha"}
+            </div>
+            {etapa===1 && (
+              <>
+                <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>🗝️ Palavra-chave</label>
+                <input autoFocus type="password" value={pPalavra} onChange={e=>setPPalavra(e.target.value)} onKeyDown={e=>e.key==="Enter"&&verificarPalavra()} placeholder="••••••" style={iSm} />
+                {pErro && <div style={{ background:"#3a0a0a", border:"2px solid #e74c3c", borderRadius:8, padding:"8px 12px", fontSize:13, color:"#e74c3c", fontWeight:700, marginBottom:12 }}>⚠️ {pErro}</div>}
+                <div style={{ display:"flex", gap:10 }}>
+                  <button onClick={verificarPalavra} style={{ flex:1, padding:14, borderRadius:12, border:"none", background:"#f59e0b", color:"#12122a", fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Continuar →</button>
+                  <button onClick={fechar} style={{ padding:"14px 18px", borderRadius:12, border:"2px solid #2a2a5a", background:"transparent", color:"#aaa", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>✕</button>
+                </div>
+              </>
+            )}
+            {etapa===2 && (
+              <>
+                <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>📧 E-mail</label>
+                <input autoFocus type="email" value={pEmail} onChange={e=>setPEmail(e.target.value)} placeholder="seu@email.com" style={iSm} />
+                <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>🔒 Senha</label>
+                <input type="password" value={pSenha} onChange={e=>setPSenha(e.target.value)} onKeyDown={e=>e.key==="Enter"&&entrar()} placeholder="••••••" style={iSm} />
+                {pErro && <div style={{ background:"#3a0a0a", border:"2px solid #e74c3c", borderRadius:8, padding:"8px 12px", fontSize:13, color:"#e74c3c", fontWeight:700, marginBottom:12 }}>⚠️ {pErro}</div>}
+                <div style={{ display:"flex", gap:10 }}>
+                  <button onClick={entrar} style={{ flex:1, padding:14, borderRadius:12, border:"none", background:"#f59e0b", color:"#12122a", fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Entrar</button>
+                  <button onClick={()=>{ setEtapa(1); setPEmail(""); setPSenha(""); setPErro(""); }} style={{ padding:"14px 18px", borderRadius:12, border:"2px solid #2a2a5a", background:"transparent", color:"#aaa", fontSize:14, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>← Voltar</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── TELA PROPRIETÁRIO ─────────────────────────────────────────────────────────
+function TelaProprietario({ nomeEscola, setNomeEscola, telEscola, setTelEscola, whatsEscola, setWhatsEscola, alunos, setAlunos, comunicados, setComunicados, themeKey, onChangeTheme, appBloqueado, setAppBloqueado, onVoltar }) {
+  const [aba, setAba] = useState("geral");
+  const [nomeTemp, setNomeTemp]   = useState(nomeEscola);
+  const [telTemp, setTelTemp]     = useState(telEscola);
+  const [whatsTemp, setWhatsTemp] = useState(whatsEscola);
+  const [salvo, setSalvo]         = useState(false);
+
+  const salvar = () => {
+    setNomeEscola(nomeTemp);
+    setTelEscola(telTemp);
+    setWhatsEscola(whatsTemp);
+    setSalvo(true);
+    setTimeout(() => setSalvo(false), 2500);
+  };
+
+  const iS = { width:"100%", padding:"13px 15px", borderRadius:12, border:"2px solid #334", fontSize:15, color:"#eee", background:"#1a1a2e", outline:"none", fontFamily:"'Nunito',sans-serif", marginBottom:14 };
+
+  const ABAS_P = [
+    { key:"geral",   label:"⚙️ Geral"    },
+    { key:"alunos",  label:"👨‍👩‍👧 Alunos"  },
+    { key:"avisos",  label:"📣 Avisos"   },
+    { key:"bloqueio",label:"🔒 Bloqueio" },
+  ];
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#0d1117", fontFamily:"'Nunito',sans-serif", display:"flex", flexDirection:"column" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box}`}</style>
+
+      {/* Header */}
+      <div style={{ background:"#12122a", borderBottom:"2px solid #2a2a5a", padding:"16px 20px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div>
+          <div style={{ fontSize:18, fontWeight:900, color:"#f59e0b" }}>👑 Painel do Proprietário</div>
+          <div style={{ fontSize:13, color:"#8888bb" }}>Configurações avançadas</div>
+        </div>
+        <button onClick={onVoltar} style={{ background:"#1e1e40", border:"2px solid #2a2a5a", color:"#aaa", borderRadius:10, padding:"8px 16px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>← Sair</button>
+      </div>
+
+      {/* Abas */}
+      <div style={{ display:"flex", background:"#12122a", borderBottom:"2px solid #2a2a5a" }}>
+        {ABAS_P.map(a => (
+          <button key={a.key} onClick={()=>setAba(a.key)} style={{ flex:1, padding:"13px 4px", border:"none", background:"none", fontSize:12, fontWeight:700, cursor:"pointer", color:aba===a.key?"#f59e0b":"#666", borderBottom:aba===a.key?"3px solid #f59e0b":"3px solid transparent", fontFamily:"'Nunito',sans-serif" }}>
+            {a.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ flex:1, overflowY:"auto", padding:20 }}>
+
+        {/* ABA GERAL */}
+        {aba==="geral" && (
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:"#f59e0b", marginBottom:20 }}>Configurações da Escola</div>
+            <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>🏫 Nome da Escola</label>
+            <input value={nomeTemp} onChange={e=>setNomeTemp(e.target.value)} placeholder="Ex: CETI" style={iS} />
+            <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>📞 Telefone exibido</label>
+            <input value={telTemp} onChange={e=>setTelTemp(e.target.value)} placeholder="Ex: (92) 99276-7068" style={iS} />
+            <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>💬 Número WhatsApp (só dígitos com DDI)</label>
+            <input value={whatsTemp} onChange={e=>setWhatsTemp(e.target.value)} placeholder="Ex: 5592992767068" style={iS} />
+            <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:8 }}>🎨 Tema visual</label>
+            <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
+              {[{key:"padrao",label:"Padrão",cor:"#1a5276"},{key:"preto",label:"Dark",cor:"#26262e"},{key:"azul",label:"Azul",cor:"#3b82f6"},{key:"magenta",label:"Rosa",cor:"#ec4899"}].map(t=>(
+                <button key={t.key} onClick={()=>onChangeTheme(t.key)} style={{ padding:"10px 16px", borderRadius:10, border:`2px solid ${themeKey===t.key?"#f59e0b":"#2a2a5a"}`, background:themeKey===t.key?"#f59e0b22":"#1a1a2e", color:themeKey===t.key?"#f59e0b":"#aaa", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:8, fontFamily:"'Nunito',sans-serif" }}>
+                  <span style={{ width:14, height:14, borderRadius:"50%", background:t.cor, display:"inline-block" }}/>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {salvo && <div style={{ background:"#0a2e1a", border:"2px solid #27ae60", borderRadius:10, padding:"10px 14px", color:"#27ae60", fontWeight:700, fontSize:14, marginBottom:14 }}>✅ Configurações salvas!</div>}
+            <button onClick={salvar} style={{ width:"100%", padding:16, borderRadius:14, border:"none", background:"#f59e0b", color:"#12122a", fontSize:16, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>💾 Salvar Configurações</button>
+          </div>
+        )}
+
+        {/* ABA ALUNOS */}
+        {aba==="alunos" && (
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:"#f59e0b", marginBottom:16 }}>Alunos Cadastrados ({alunos.length})</div>
+            {alunos.length===0 && <div style={{ color:"#666", textAlign:"center", padding:30 }}>Nenhum aluno cadastrado.</div>}
+            {alunos.map(a => (
+              <div key={a.id} style={{ background:"#12122a", border:"2px solid #2a2a5a", borderRadius:14, padding:"14px 16px", marginBottom:10 }}>
+                <div style={{ fontSize:15, fontWeight:800, color:"#eee" }}>👦 {a.filho} — Turma {a.turma}</div>
+                <div style={{ fontSize:13, color:"#8888bb", marginTop:4 }}>Resp: {a.nome}</div>
+                <div style={{ fontSize:12, color:"#666", marginTop:2 }}>📧 {a.email} {a.celular ? `· 📱 ${a.celular}` : ""} {a.celular2 ? `· 📱 ${a.celular2}` : ""}</div>
+                <button onClick={()=>setAlunos(prev=>prev.filter(x=>x.id!==a.id))} style={{ marginTop:10, padding:"6px 14px", borderRadius:8, border:"2px solid #e74c3c", background:"transparent", color:"#e74c3c", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>🗑️ Excluir</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ABA AVISOS */}
+        {aba==="avisos" && (
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:"#f59e0b", marginBottom:16 }}>Avisos Publicados ({comunicados.length})</div>
+            {comunicados.map(c => (
+              <div key={c.id} style={{ background:"#12122a", border:"2px solid #2a2a5a", borderRadius:14, padding:"14px 16px", marginBottom:10 }}>
+                <div style={{ fontSize:15, fontWeight:800, color:"#eee" }}>{c.titulo}</div>
+                <div style={{ fontSize:12, color:"#8888bb", marginTop:4 }}>Por {c.autor} · {c.tipo} · {c.visibilidade}</div>
+                <button onClick={()=>setComunicados(prev=>prev.filter(x=>x.id!==c.id))} style={{ marginTop:10, padding:"6px 14px", borderRadius:8, border:"2px solid #e74c3c", background:"transparent", color:"#e74c3c", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>🗑️ Excluir aviso</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ABA BLOQUEIO */}
+        {aba==="bloqueio" && (
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:"#f59e0b", marginBottom:8 }}>🔒 Controle de Acesso</div>
+            <div style={{ fontSize:14, color:"#8888bb", marginBottom:24, lineHeight:1.6 }}>
+              Quando bloqueado, todos os usuários verão a tela de <strong style={{ color:"#f59e0b" }}>Assinatura Expirada</strong> ao abrir o app.
+            </div>
+            <div style={{ background:"#12122a", border:`2px solid ${appBloqueado?"#e74c3c":"#27ae60"}`, borderRadius:18, padding:24, textAlign:"center", marginBottom:24 }}>
+              <div style={{ fontSize:48, marginBottom:8 }}>{appBloqueado ? "🔒" : "🔓"}</div>
+              <div style={{ fontSize:18, fontWeight:900, color:appBloqueado?"#e74c3c":"#27ae60", marginBottom:4 }}>
+                App {appBloqueado ? "BLOQUEADO" : "LIBERADO"}
+              </div>
+              <div style={{ fontSize:13, color:"#666" }}>{appBloqueado ? "Usuários veem tela de assinatura expirada" : "Usuários acessam normalmente"}</div>
+            </div>
+            <button
+              onClick={()=>setAppBloqueado(prev=>!prev)}
+              style={{ width:"100%", padding:18, borderRadius:16, border:"none", background:appBloqueado?"#27ae60":"#e74c3c", color:"#fff", fontSize:17, fontWeight:900, cursor:"pointer", fontFamily:"'Nunito',sans-serif", boxShadow:appBloqueado?"0 4px 20px #27ae6044":"0 4px 20px #e74c3c44" }}
+            >
+              {appBloqueado ? "🔓 Desbloquear App" : "🔒 Bloquear App (Expirar Assinatura)"}
+            </button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+
+<!-- Registro do Service Worker (PWA) -->
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js")
+        .then(() => console.log("SW registrado ✅"))
+        .catch(err => console.log("SW erro:", err));
+    });
+  }
+</script>
+</body>
+</html>
