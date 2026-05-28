@@ -15,6 +15,38 @@
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, push, update, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  // ══════════════════════════════════════════════════════════
+  // SUBSTITUA os valores abaixo com os dados do seu Firebase.
+  // Vá em: Firebase Console → Configurações do projeto → Seus apps → SDK
+  // ══════════════════════════════════════════════════════════
+  const firebaseConfig = {
+    apiKey: "AIzaSyBULts5kJXPgG9L1bShGDC4NWVpZYcvYMA",
+    authDomain: "comunicacao--escolar.firebaseapp.com",
+    databaseURL: "https://comunicacao--escolar-default-rtdb.firebaseio.com",
+    projectId: "comunicacao--escolar",
+    storageBucket: "comunicacao--escolar.firebasestorage.app",
+    messagingSenderId: "755553124480",
+    appId: "1:755553124480:web:c120033de0ffe1e50e2665",
+    measurementId: "G-SGF34H2MNX"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  window._firebaseDB = db;
+  window._firebaseRef = ref;
+  window._firebaseOnValue = onValue;
+  window._firebaseSet = set;
+  window._firebasePush = push;
+  window._firebaseUpdate = update;
+  window._firebaseRemove = remove;
+  window._firebaseReady = true;
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
 <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -66,9 +98,9 @@ function ThemePicker({ atual, onChange }) {
 
 // ── DADOS INICIAIS ────────────────────────────────────────────────────────────
 // Senhas armazenadas como SHA-256. Nunca armazenar texto puro.
-// sha256("1234") = 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
+// sha256("CETIDariana2023") = d99903054b52823a734825b7ca7b6d620faec835ba1d9960ff1330ecc3235c45
 const USUARIOS_ESCOLA = [
-  { id:"escola1", email:"CETIDariana", senha:"03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4", tipo:"escola", nome:"Dariana" },
+  { id:"escola1", email:"CETIDariana", senha:"d99903054b52823a734825b7ca7b6d620faec835ba1d9960ff1330ecc3235c45", tipo:"escola", nome:"Dariana" },
 ];
 
 // sha256("1234")   = 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
@@ -122,6 +154,113 @@ function App() {
   const th = THEMES[themeKey];
 
   const [presencas, setPresencas] = useState({});
+  const [fbPronto, setFbPronto] = useState(false);
+
+  // ── FIREBASE: sincronização em tempo real ─────────────────────────────────
+  useEffect(() => {
+    const conectar = () => {
+      const db = window._firebaseDB;
+      const fbRef = window._firebaseRef;
+      const onValue = window._firebaseOnValue;
+      if (!db) return;
+      setFbPronto(true);
+
+      // Comunicados
+      onValue(fbRef(db, 'comunicados'), snap => {
+        const val = snap.val();
+        if (val) setComunicados(Object.values(val).sort((a,b) => new Date(b.data) - new Date(a.data)));
+      });
+
+      // Alunos
+      onValue(fbRef(db, 'alunos'), snap => {
+        const val = snap.val();
+        if (val) setAlunos(Object.values(val));
+      });
+
+      // Mensagens
+      onValue(fbRef(db, 'mensagens'), snap => {
+        const val = snap.val();
+        if (val) setMensagens(val);
+      });
+
+      // App bloqueado
+      onValue(fbRef(db, 'config/bloqueado'), snap => {
+        const val = snap.val();
+        if (val !== null) setAppBloqueado(!!val);
+      });
+
+      // Presenças
+      onValue(fbRef(db, 'presencas'), snap => {
+        const val = snap.val();
+        if (val) setPresencas(val);
+      });
+
+      // Config escola
+      onValue(fbRef(db, 'config/escola'), snap => {
+        const val = snap.val();
+        if (val) {
+          if (val.nome)  setNomeEscola(val.nome);
+          if (val.tel)   setTelEscola(val.tel);
+          if (val.whats) setWhatsEscola(val.whats);
+        }
+      });
+    };
+
+    if (window._firebaseReady) { conectar(); }
+    else { window.addEventListener('firebase-ready', conectar); }
+    return () => window.removeEventListener('firebase-ready', conectar);
+  }, []);
+
+  // ── FIREBASE: funções de escrita ──────────────────────────────────────────
+  const fbSalvarComunicado = (aviso) => {
+    const db = window._firebaseDB;
+    if (!db) { setComunicados(prev => [aviso, ...prev]); return; }
+    window._firebaseSet(window._firebaseRef(db, \`comunicados/\${aviso.id}\`), aviso);
+  };
+
+  const fbExcluirComunicado = (id) => {
+    const db = window._firebaseDB;
+    if (!db) { setComunicados(prev => prev.filter(x => x.id !== id)); return; }
+    window._firebaseRemove(window._firebaseRef(db, \`comunicados/\${id}\`));
+  };
+
+  const fbSalvarAluno = (aluno) => {
+    const db = window._firebaseDB;
+    if (!db) { setAlunos(prev => { const idx = prev.findIndex(a=>a.id===aluno.id); return idx>=0 ? prev.map(a=>a.id===aluno.id?aluno:a) : [...prev,aluno]; }); return; }
+    window._firebaseSet(window._firebaseRef(db, \`alunos/\${aluno.id}\`), aluno);
+  };
+
+  const fbExcluirAluno = (id) => {
+    const db = window._firebaseDB;
+    if (!db) { setAlunos(prev => prev.filter(a => a.id !== id)); return; }
+    window._firebaseRemove(window._firebaseRef(db, \`alunos/\${id}\`));
+  };
+
+  const fbEnviarMensagem = (paiId, msg) => {
+    const db = window._firebaseDB;
+    if (!db) { setMensagens(prev => ({ ...prev, [paiId]: [...(prev[paiId]||[]), msg] })); return; }
+    const novas = [...(mensagens[paiId]||[]), msg];
+    window._firebaseSet(window._firebaseRef(db, \`mensagens/\${paiId}\`), novas);
+  };
+
+  const fbSetBloqueado = (val) => {
+    const db = window._firebaseDB;
+    if (!db) { setAppBloqueado(val); return; }
+    window._firebaseSet(window._firebaseRef(db, 'config/bloqueado'), val);
+  };
+
+  const fbSalvarConfigEscola = (nome, tel, whats) => {
+    const db = window._firebaseDB;
+    if (!db) return;
+    window._firebaseSet(window._firebaseRef(db, 'config/escola'), { nome, tel, whats });
+  };
+
+  const fbSalvarPresenca = (reuniaoId, usuarioId, valor) => {
+    const db = window._firebaseDB;
+    const novo = { ...presencas, [reuniaoId]: { ...(presencas[reuniaoId]||{}), [usuarioId]: valor } };
+    if (!db) { setPresencas(novo); return; }
+    window._firebaseSet(window._firebaseRef(db, \`presencas/\${reuniaoId}/\${usuarioId}\`), valor);
+  };
 
   const todosPerfis = [...USUARIOS_ESCOLA, ...alunos];
 
@@ -140,10 +279,11 @@ function App() {
       nomeEscola={nomeEscola} setNomeEscola={setNomeEscola}
       telEscola={telEscola}   setTelEscola={setTelEscola}
       whatsEscola={whatsEscola} setWhatsEscola={setWhatsEscola}
-      alunos={alunos} setAlunos={setAlunos}
-      comunicados={comunicados} setComunicados={setComunicados}
+      alunos={alunos} onSalvarAluno={fbSalvarAluno} onExcluirAluno={fbExcluirAluno}
+      comunicados={comunicados} onExcluirComunicado={fbExcluirComunicado}
       themeKey={themeKey} onChangeTheme={setThemeKey}
-      appBloqueado={appBloqueado} setAppBloqueado={setAppBloqueado}
+      appBloqueado={appBloqueado} onSetBloqueado={fbSetBloqueado}
+      onSalvarConfigEscola={fbSalvarConfigEscola}
       onVoltar={() => setTelaPropriet(false)}
     />
   );
@@ -151,16 +291,18 @@ function App() {
   if (!usuario) return <TelaLogin onLogin={u => setUsuario(u)} loginFn={login} th={th} themeKey={themeKey} onChangeTheme={setThemeKey} onAbrirPropriet={() => setTelaPropriet(true)} nomeEscola={nomeEscola} telEscola={telEscola} whatsEscola={whatsEscola} />;
 
   if (usuario.tipo === "escola") return (
-    <TelaEscola usuario={usuario} comunicados={comunicados} setComunicados={setComunicados}
-      mensagens={mensagens} setMensagens={setMensagens} alunos={alunos} setAlunos={setAlunos}
+    <TelaEscola usuario={usuario} comunicados={comunicados}
+      onSalvarComunicado={fbSalvarComunicado} onExcluirComunicado={fbExcluirComunicado}
+      mensagens={mensagens} onEnviarMensagem={fbEnviarMensagem}
+      alunos={alunos} onSalvarAluno={fbSalvarAluno} onExcluirAluno={fbExcluirAluno}
       presencas={presencas}
       onSair={() => setUsuario(null)} th={th} themeKey={themeKey} onChangeTheme={setThemeKey} />
   );
 
   return (
     <TelaPai usuario={usuario} comunicados={comunicados}
-      mensagens={mensagens} setMensagens={setMensagens}
-      presencas={presencas} setPresencas={setPresencas}
+      mensagens={mensagens} onEnviarMensagem={(txt) => fbEnviarMensagem(usuario.id, { id:Date.now(), de:"pai", texto:txt, data:new Date().toISOString() })}
+      presencas={presencas} onConfirmarPresenca={(rId, val) => fbSalvarPresenca(rId, usuario.id, val)}
       onSair={() => setUsuario(null)} th={th} themeKey={themeKey} onChangeTheme={setThemeKey} />
   );
 }
@@ -319,7 +461,7 @@ function TelaLogin({ onLogin, loginFn, th, themeKey, onChangeTheme, onAbrirPropr
 }
 
 // ── TELA ESCOLA ───────────────────────────────────────────────────────────────
-function TelaEscola({ usuario, comunicados, setComunicados, mensagens, setMensagens, alunos, setAlunos, presencas, onSair, th, themeKey, onChangeTheme }) {
+function TelaEscola({ usuario, comunicados, onSalvarComunicado, onExcluirComunicado, mensagens, onEnviarMensagem, alunos, onSalvarAluno, onExcluirAluno, presencas, onSair, th, themeKey, onChangeTheme }) {
   const [aba, setAba]                   = useState("avisos");
   const [paiSelecionado, setPaiSel]     = useState(null);
 
@@ -397,18 +539,18 @@ function TelaEscola({ usuario, comunicados, setComunicados, mensagens, setMensag
 
         {aba === "msgs" && paiSelecionado && (
           <ChatEscola pai={paiSelecionado} mensagens={mensagens[paiSelecionado.id]||[]}
-            onEnviar={txt => setMensagens(prev => ({ ...prev, [paiSelecionado.id]: [...(prev[paiSelecionado.id]||[]), { id:Date.now(), de:"escola", texto:txt, data:new Date().toISOString() }] }))}
+            onEnviar={txt => onEnviarMensagem(paiSelecionado.id, { id:Date.now(), de:"escola", texto:txt, data:new Date().toISOString() })}
             onVoltar={() => setPaiSel(null)} th={th} />
         )}
 
         {aba === "novo" && (
           <NovoAviso alunos={alunos}
-            onSalvar={aviso => { setComunicados(prev => [{ ...aviso, id:Date.now(), autor:usuario.nome, data:new Date().toISOString() }, ...prev]); setAba("avisos"); }}
+            onSalvar={aviso => { const novoAviso = { ...aviso, id:Date.now(), autor:usuario.nome, data:new Date().toISOString() }; onSalvarComunicado(novoAviso); setAba("avisos"); }}
             th={th} />
         )}
 
         {aba === "alunos" && (
-          <GerenciarAlunos alunos={alunos} setAlunos={setAlunos} th={th} />
+          <GerenciarAlunos alunos={alunos} onSalvarAluno={onSalvarAluno} onExcluirAluno={onExcluirAluno} th={th} />
         )}
 
         {aba === "presencas" && (
@@ -686,7 +828,7 @@ function FormAluno({ inicial, modoNovo, onSalvar, onVoltar, th, turmasExtras, se
   );
 }
 
-function GerenciarAlunos({ alunos, setAlunos, th }) {
+function GerenciarAlunos({ alunos, onSalvarAluno, onExcluirAluno, th }) {
   const [tela,        setTela]        = useState("lista");
   const [selecionado, setSelecionado] = useState(null);
   const [busca,       setBusca]       = useState("");
@@ -701,9 +843,10 @@ function GerenciarAlunos({ alunos, setAlunos, th }) {
 
   const salvar = (dados) => {
     if (tela === "novo") {
-      setAlunos(prev => [...prev, { ...dados, id:"pai_"+Date.now(), tipo:"pai" }]);
+      const novoAluno = { ...dados, id:"pai_"+Date.now(), tipo:"pai" };
+      onSalvarAluno(novoAluno);
     } else {
-      setAlunos(prev => prev.map(a => a.id===selecionado.id ? { ...a, ...dados } : a));
+      onSalvarAluno({ ...selecionado, ...dados });
     }
     setTela("lista"); setSelecionado(null);
   };
@@ -733,7 +876,7 @@ function GerenciarAlunos({ alunos, setAlunos, th }) {
             </div>
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={() => setExcluindo(null)} style={{ flex:1, padding:14, borderRadius:12, border:`2px solid ${th.inputBorder}`, background:th.input, color:th.text, fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Cancelar</button>
-              <button onClick={() => { setAlunos(prev=>prev.filter(a=>a.id!==excluindo.id)); setExcluindo(null); }} style={{ flex:1, padding:14, borderRadius:12, border:"none", background:th.urgente, color:"#fff", fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Excluir</button>
+              <button onClick={() => { onExcluirAluno(excluindo.id); setExcluindo(null); }} style={{ flex:1, padding:14, borderRadius:12, border:"none", background:th.urgente, color:"#fff", fontSize:15, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>Excluir</button>
             </div>
           </div>
         </div>
@@ -872,7 +1015,7 @@ function ChatEscola({ pai, mensagens, onEnviar, onVoltar, th }) {
 }
 
 // ── TELA PAI ──────────────────────────────────────────────────────────────────
-function TelaPai({ usuario, comunicados, mensagens, setMensagens, presencas, setPresencas, onSair, th, themeKey, onChangeTheme }) {
+function TelaPai({ usuario, comunicados, mensagens, onEnviarMensagem, presencas, onConfirmarPresenca, onSair, th, themeKey, onChangeTheme }) {
   const [tela,        setTela]        = useState("inicio");
   const [avisosLendo, setAvisosLendo] = useState(null);
 
@@ -989,8 +1132,8 @@ function TelaPai({ usuario, comunicados, mensagens, setMensagens, presencas, set
         <div style={{ background:th.card, borderRadius:18, padding:20, fontSize:16, color:th.text, lineHeight:1.9, whiteSpace:"pre-line", marginBottom:20, border:`1px solid ${th.cardBorder}` }}>{avisosLendo.corpo}</div>
         {avisosLendo.tipo==="reuniao" && (() => {
           const respostaAtual = (presencas[avisosLendo.id]||{})[usuario.id];
-          const confirmar = () => setPresencas(prev => ({ ...prev, [avisosLendo.id]: { ...(prev[avisosLendo.id]||{}), [usuario.id]:"sim" } }));
-          const recusar   = () => setPresencas(prev => ({ ...prev, [avisosLendo.id]: { ...(prev[avisosLendo.id]||{}), [usuario.id]:"nao" } }));
+          const confirmar = () => onConfirmarPresenca(avisosLendo.id, "sim");
+          const recusar   = () => onConfirmarPresenca(avisosLendo.id, "nao");
           return (
             <div style={{ marginBottom:12 }}>
               <div style={{ fontSize:13, fontWeight:700, color:th.textSub, marginBottom:8, textAlign:"center" }}>Sua presença na reunião:</div>
@@ -1019,7 +1162,7 @@ function TelaPai({ usuario, comunicados, mensagens, setMensagens, presencas, set
     <div style={{ minHeight:"100vh", background:th.bg, fontFamily:"'Nunito',sans-serif", display:"flex", flexDirection:"column" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box}`}</style>
       <Header titulo="💬 Falar com a Escola" sub="Respondemos em até 1 dia útil" onVoltar={()=>setTela("inicio")} />
-      <ChatPai mensagens={minhasMsgs} onEnviar={txt => setMensagens(prev=>({ ...prev, [usuario.id]:[...(prev[usuario.id]||[]),{ id:Date.now(), de:"pai", texto:txt, data:new Date().toISOString() }] }))} th={th} />
+      <ChatPai mensagens={minhasMsgs} onEnviar={txt => onEnviarMensagem(txt)} th={th} />
     </div>
   );
 
@@ -1221,7 +1364,7 @@ function TelaBloqueada({ whatsEscola, telEscola, onDesbloquear }) {
 }
 
 // ── TELA PROPRIETÁRIO ─────────────────────────────────────────────────────────
-function TelaProprietario({ nomeEscola, setNomeEscola, telEscola, setTelEscola, whatsEscola, setWhatsEscola, alunos, setAlunos, comunicados, setComunicados, themeKey, onChangeTheme, appBloqueado, setAppBloqueado, onVoltar }) {
+function TelaProprietario({ nomeEscola, setNomeEscola, telEscola, setTelEscola, whatsEscola, setWhatsEscola, alunos, onSalvarAluno, onExcluirAluno, comunicados, onExcluirComunicado, themeKey, onChangeTheme, appBloqueado, onSetBloqueado, onSalvarConfigEscola, onVoltar }) {
   const [aba, setAba] = useState("geral");
   const [nomeTemp, setNomeTemp]   = useState(nomeEscola);
   const [telTemp, setTelTemp]     = useState(telEscola);
@@ -1232,6 +1375,7 @@ function TelaProprietario({ nomeEscola, setNomeEscola, telEscola, setTelEscola, 
     setNomeEscola(nomeTemp);
     setTelEscola(telTemp);
     setWhatsEscola(whatsTemp);
+    if (onSalvarConfigEscola) onSalvarConfigEscola(nomeTemp, telTemp, whatsTemp);
     setSalvo(true);
     setTimeout(() => setSalvo(false), 2500);
   };
@@ -1303,7 +1447,7 @@ function TelaProprietario({ nomeEscola, setNomeEscola, telEscola, setTelEscola, 
                 <div style={{ fontSize:15, fontWeight:800, color:"#eee" }}>👦 {a.filho} — Turma {a.turma}</div>
                 <div style={{ fontSize:13, color:"#8888bb", marginTop:4 }}>Resp: {a.nome}</div>
                 <div style={{ fontSize:12, color:"#666", marginTop:2 }}>📧 {a.email} {a.celular ? `· 📱 ${a.celular}` : ""} {a.celular2 ? `· 📱 ${a.celular2}` : ""}</div>
-                <button onClick={()=>setAlunos(prev=>prev.filter(x=>x.id!==a.id))} style={{ marginTop:10, padding:"6px 14px", borderRadius:8, border:"2px solid #e74c3c", background:"transparent", color:"#e74c3c", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>🗑️ Excluir</button>
+                <button onClick={()=>onExcluirAluno(a.id)} style={{ marginTop:10, padding:"6px 14px", borderRadius:8, border:"2px solid #e74c3c", background:"transparent", color:"#e74c3c", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>🗑️ Excluir</button>
               </div>
             ))}
           </div>
@@ -1317,7 +1461,7 @@ function TelaProprietario({ nomeEscola, setNomeEscola, telEscola, setTelEscola, 
               <div key={c.id} style={{ background:"#12122a", border:"2px solid #2a2a5a", borderRadius:14, padding:"14px 16px", marginBottom:10 }}>
                 <div style={{ fontSize:15, fontWeight:800, color:"#eee" }}>{c.titulo}</div>
                 <div style={{ fontSize:12, color:"#8888bb", marginTop:4 }}>Por {c.autor} · {c.tipo} · {c.visibilidade}</div>
-                <button onClick={()=>setComunicados(prev=>prev.filter(x=>x.id!==c.id))} style={{ marginTop:10, padding:"6px 14px", borderRadius:8, border:"2px solid #e74c3c", background:"transparent", color:"#e74c3c", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>🗑️ Excluir aviso</button>
+                <button onClick={()=>onExcluirComunicado(c.id)} style={{ marginTop:10, padding:"6px 14px", borderRadius:8, border:"2px solid #e74c3c", background:"transparent", color:"#e74c3c", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>🗑️ Excluir aviso</button>
               </div>
             ))}
           </div>
@@ -1338,7 +1482,7 @@ function TelaProprietario({ nomeEscola, setNomeEscola, telEscola, setTelEscola, 
               <div style={{ fontSize:13, color:"#666" }}>{appBloqueado ? "Usuários veem tela de assinatura expirada" : "Usuários acessam normalmente"}</div>
             </div>
             <button
-              onClick={()=>setAppBloqueado(prev=>!prev)}
+              onClick={()=>onSetBloqueado(!appBloqueado)}
               style={{ width:"100%", padding:18, borderRadius:16, border:"none", background:appBloqueado?"#27ae60":"#e74c3c", color:"#fff", fontSize:17, fontWeight:900, cursor:"pointer", fontFamily:"'Nunito',sans-serif", boxShadow:appBloqueado?"0 4px 20px #27ae6044":"0 4px 20px #e74c3c44" }}
             >
               {appBloqueado ? "🔓 Desbloquear App" : "🔒 Bloquear App (Expirar Assinatura)"}
