@@ -143,6 +143,29 @@ function tempoAtras(dateStr) {
   return `${Math.floor(h/24)} dias atrás`;
 }
 
+// ── SOM DE MENSAGEM ───────────────────────────────────────────────────────────
+function tocarSomMensagem() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const tocar = (freq, inicio, duracao, volume=0.18) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + inicio);
+      gain.gain.setValueAtTime(0, ctx.currentTime + inicio);
+      gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + inicio + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + inicio + duracao);
+      osc.start(ctx.currentTime + inicio);
+      osc.stop(ctx.currentTime + inicio + duracao);
+    };
+    tocar(880, 0,    0.18, 0.15);
+    tocar(1100, 0.15, 0.22, 0.18);
+    tocar(1320, 0.32, 0.30, 0.14);
+  } catch(e) {}
+}
+
 // ── APP ───────────────────────────────────────────────────────────────────────
 function App() {
   const [usuario,       setUsuario]       = useState(null);
@@ -1175,7 +1198,15 @@ function NovoAviso({ onSalvar, alunos, th }) {
 function ChatEscola({ pai, mensagens, onEnviar, onVoltar, th }) {
   const [texto, setTexto] = useState("");
   const fimRef = useRef(null);
+  const qtdRef = useRef(mensagens.length);
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior:"smooth" }); }, [mensagens]);
+  useEffect(() => {
+    const ultima = mensagens[mensagens.length - 1];
+    if (mensagens.length > qtdRef.current && ultima && ultima.de === "pai") {
+      tocarSomMensagem();
+    }
+    qtdRef.current = mensagens.length;
+  }, [mensagens]);
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 160px)" }}>
       <button onClick={onVoltar} style={{ background:th.badgeBg, border:"none", color:th.btnPrimary, borderRadius:10, padding:"10px 16px", fontSize:14, fontWeight:700, cursor:"pointer", marginBottom:12, alignSelf:"flex-start", fontFamily:"'Nunito',sans-serif" }}>← Voltar</button>
@@ -1226,10 +1257,14 @@ function TelaPai({ usuario, comunicados, mensagens, onEnviarMensagem, presencas,
       <div style={{ background:th.header, padding:"24px 20px 28px" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
           <div>
-            <div style={{ fontSize:14, color:th.headerSub }}>Olá,</div>
-            <div style={{ fontSize:26, fontWeight:900, color:th.headerText }}>{usuario.nome} 👋</div>
-            <div style={{ fontSize:13, color:th.headerSub, marginTop:2 }}>Olá! Que bom ter você por aqui hoje.</div>
-            <div style={{ fontSize:14, color:th.headerSub, marginTop:4 }}>Filho(a): <strong style={{ color:th.headerText }}>{usuario.filho}</strong> · Turma {usuario.turma}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+              <span style={{ fontSize:14, fontWeight:600, color:th.headerSub, letterSpacing:0.3 }}>Olá,</span>
+              <span style={{ fontSize:22, fontWeight:900, color:th.headerText, letterSpacing:0.2 }}>{usuario.nome} 👋</span>
+            </div>
+            <div style={{ fontSize:13, color:th.headerSub, marginBottom:8, fontStyle:"italic", opacity:0.92 }}>Que bom ter você por aqui hoje. 🌟</div>
+            <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.15)", borderRadius:20, padding:"5px 12px" }}>
+              <span style={{ fontSize:13, color:th.headerSub }}>👦 <strong style={{ color:th.headerText, fontWeight:800 }}>{usuario.filho}</strong> <span style={{ opacity:0.5 }}>·</span> Turma <strong style={{ color:th.headerText, fontWeight:800 }}>{usuario.turma}</strong></span>
+            </div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <ThemePicker atual={themeKey} onChange={onChangeTheme} />
@@ -1337,7 +1372,15 @@ function TelaPai({ usuario, comunicados, mensagens, onEnviarMensagem, presencas,
 function ChatPai({ mensagens, onEnviar, th }) {
   const [texto, setTexto] = useState("");
   const fimRef = useRef(null);
+  const qtdRef = useRef(mensagens.length);
   useEffect(() => { fimRef.current?.scrollIntoView({ behavior:"smooth" }); }, [mensagens]);
+  useEffect(() => {
+    const ultima = mensagens[mensagens.length - 1];
+    if (mensagens.length > qtdRef.current && ultima && ultima.de === "escola") {
+      tocarSomMensagem();
+    }
+    qtdRef.current = mensagens.length;
+  }, [mensagens]);
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", height:"calc(100vh - 130px)" }}>
       <BolhasChat mensagens={mensagens} ladoDireito="pai" fimRef={fimRef} th={th} />
