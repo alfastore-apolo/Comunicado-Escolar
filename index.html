@@ -100,8 +100,14 @@ function ThemePicker({ atual, onChange }) {
 // ── DADOS INICIAIS ────────────────────────────────────────────────────────────
 // Senhas armazenadas como SHA-256. Nunca armazenar texto puro.
 // sha256("CETIDariana2023") = d99903054b52823a734825b7ca7b6d620faec835ba1d9960ff1330ecc3235c45
-const USUARIOS_ESCOLA = [
-  { id:"escola1", email:"CETIDariana", senha:"d99903054b52823a734825b7ca7b6d620faec835ba1d9960ff1330ecc3235c45", tipo:"escola", nome:"Dariana" },
+const USUARIOS_ESCOLA_INICIAL = [
+  {
+    id:"escola1",
+    email:"CETIDariana",
+    senha:"d99903054b52823a734825b7ca7b6d620faec835ba1d9960ff1330ecc3235c45",
+    tipo:"escola",
+    nome:"Dariana"
+  }
 ];
 
 // sha256("1234")   = 03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4
@@ -143,6 +149,7 @@ function tempoAtras(dateStr) {
 // ── APP ───────────────────────────────────────────────────────────────────────
 function App() {
   const [usuario,       setUsuario]       = useState(null);
+  const [usuariosEscola, setUsuariosEscola] = useState(USUARIOS_ESCOLA_INICIAL);
   const [alunos,        setAlunos]        = useState(ALUNOS_INICIAIS);
   const [comunicados,   setComunicados]   = useState(COMUNICADOS_INICIAIS);
   const [mensagens,     setMensagens]     = useState(MENSAGENS_INICIAIS);
@@ -154,8 +161,16 @@ function App() {
   const [whatsEscola,   setWhatsEscola]   = useState("5592992767068");
   const th = THEMES[themeKey];
 
+  const [loginEscola, setLoginEscola] = useState(
+    usuariosEscola[0]?.email || ""
+  );
+
+  const [senhaEscola, setSenhaEscola] = useState("");
+
   const [presencas, setPresencas] = useState({});
   const [fbPronto, setFbPronto] = useState(false);
+  const [turmasExtras, setTurmasExtras] = useState([]);
+  const [turmasExcluidas, setTurmasExcluidas] = useState([]);
 
   // ── FIREBASE: sincronização em tempo real ─────────────────────────────────
   useEffect(() => {
@@ -199,8 +214,14 @@ function App() {
       // Turmas
       onValue(fbRef(db, 'config/turmas'), snap => {
         const val = snap.val();
-        if (val && val.extras) window._turmasExtras = val.extras;
-        if (val && val.excluidas) window._turmasExcluidas = val.excluidas;
+        setTurmasExtras(val && val.extras ? val.extras : []);
+        setTurmasExcluidas(val && val.excluidas ? val.excluidas : []);
+      });
+
+      // Login escola
+      onValue(fbRef(db, 'config/loginEscola'), snap => {
+        const val = snap.val();
+        if (val) setUsuariosEscola(val);
       });
 
       // Config escola
@@ -257,6 +278,20 @@ function App() {
     window._firebaseSet(window._firebaseRef(db, 'config/bloqueado'), val);
   };
 
+  const fbSalvarLoginEscola = (usuarios) => {
+    const db = window._firebaseDB;
+
+    if (!db) {
+      setUsuariosEscola(usuarios);
+      return;
+    }
+
+    window._firebaseSet(
+      window._firebaseRef(db, 'config/loginEscola'),
+      usuarios
+    );
+  };
+
   const fbSalvarConfigEscola = (nome, tel, whats) => {
     const db = window._firebaseDB;
     if (!db) return;
@@ -265,8 +300,12 @@ function App() {
 
   const fbSalvarTurmas = (extras, excluidas) => {
     const db = window._firebaseDB;
+    const extrasArr = extras || [];
+    const excluidasArr = excluidas || [];
+    setTurmasExtras(extrasArr);
+    setTurmasExcluidas(excluidasArr);
     if (!db) return;
-    window._firebaseSet(window._firebaseRef(db, 'config/turmas'), { extras: extras || [], excluidas: excluidas || [] });
+    window._firebaseSet(window._firebaseRef(db, 'config/turmas'), { extras: extrasArr, excluidas: excluidasArr });
   };
 
   const fbSalvarPresenca = (reuniaoId, usuarioId, valor) => {
@@ -276,7 +315,7 @@ function App() {
     window._firebaseSet(window._firebaseRef(db, "presencas/" + reuniaoId + "/" + usuarioId), valor);
   };
 
-  const todosPerfis = [...USUARIOS_ESCOLA, ...alunos];
+  const todosPerfis = [...usuariosEscola, ...alunos];
 
   const login = async (email, senha) => {
     const hash = await sha256(senha.trim());
@@ -290,6 +329,9 @@ function App() {
 
   if (telaPropriet) return (
     <TelaProprietario
+      usuariosEscola={usuariosEscola}
+      setUsuariosEscola={setUsuariosEscola}
+      onSalvarLoginEscola={fbSalvarLoginEscola}
       nomeEscola={nomeEscola} setNomeEscola={setNomeEscola}
       telEscola={telEscola}   setTelEscola={setTelEscola}
       whatsEscola={whatsEscola} setWhatsEscola={setWhatsEscola}
@@ -310,6 +352,7 @@ function App() {
       mensagens={mensagens} onEnviarMensagem={fbEnviarMensagem}
       alunos={alunos} onSalvarAluno={fbSalvarAluno} onExcluirAluno={fbExcluirAluno}
       onSalvarTurmas={fbSalvarTurmas}
+      turmasExtras={turmasExtras} turmasExcluidas={turmasExcluidas}
       presencas={presencas}
       onSair={() => setUsuario(null)} th={th} themeKey={themeKey} onChangeTheme={setThemeKey} />
   );
@@ -476,7 +519,7 @@ function TelaLogin({ onLogin, loginFn, th, themeKey, onChangeTheme, onAbrirPropr
 }
 
 // ── TELA ESCOLA ───────────────────────────────────────────────────────────────
-function TelaEscola({ usuario, comunicados, onSalvarComunicado, onExcluirComunicado, mensagens, onEnviarMensagem, alunos, onSalvarAluno, onExcluirAluno, onSalvarTurmas, presencas, onSair, th, themeKey, onChangeTheme }) {
+function TelaEscola({ usuario, comunicados, onSalvarComunicado, onExcluirComunicado, mensagens, onEnviarMensagem, alunos, onSalvarAluno, onExcluirAluno, onSalvarTurmas, turmasExtras, turmasExcluidas, presencas, onSair, th, themeKey, onChangeTheme }) {
   const [aba, setAba]                   = useState("avisos");
   const [paiSelecionado, setPaiSel]     = useState(null);
 
@@ -565,7 +608,7 @@ function TelaEscola({ usuario, comunicados, onSalvarComunicado, onExcluirComunic
         )}
 
         {aba === "alunos" && (
-          <GerenciarAlunos alunos={alunos} onSalvarAluno={onSalvarAluno} onExcluirAluno={onExcluirAluno} onSalvarTurmas={onSalvarTurmas} th={th} />
+          <GerenciarAlunos alunos={alunos} onSalvarAluno={onSalvarAluno} onExcluirAluno={onExcluirAluno} onSalvarTurmas={onSalvarTurmas} turmasExtras={turmasExtras} turmasExcluidas={turmasExcluidas} th={th} />
         )}
 
         {aba === "presencas" && (
@@ -844,13 +887,17 @@ function FormAluno({ inicial, modoNovo, onSalvar, onVoltar, th, turmasExtras, se
   );
 }
 
-function GerenciarAlunos({ alunos, onSalvarAluno, onExcluirAluno, onSalvarTurmas, th }) {
+function GerenciarAlunos({ alunos, onSalvarAluno, onExcluirAluno, onSalvarTurmas, turmasExtras: turmasExtrasProp, turmasExcluidas: turmasExcluidasProp, th }) {
   const [tela,        setTela]        = useState("lista");
   const [selecionado, setSelecionado] = useState(null);
   const [busca,       setBusca]       = useState("");
   const [excluindo,   setExcluindo]   = useState(null);
-  const [turmasExtras, setTurmasExtras] = useState(window._turmasExtras || []);
-  const [turmasExcluidasGlobal, setTurmasExcluidasGlobal] = useState(window._turmasExcluidas || []);
+  const [turmasExtras, setTurmasExtras] = useState(turmasExtrasProp || []);
+  const [turmasExcluidasGlobal, setTurmasExcluidasGlobal] = useState(turmasExcluidasProp || []);
+
+  // Sync props → local state whenever Firebase updates
+  useEffect(() => { setTurmasExtras(turmasExtrasProp || []); }, [JSON.stringify(turmasExtrasProp)]);
+  useEffect(() => { setTurmasExcluidasGlobal(turmasExcluidasProp || []); }, [JSON.stringify(turmasExcluidasProp)]);
 
   const filtrados = alunos.filter(a =>
     (a.filho||"").toLowerCase().includes(busca.toLowerCase()) ||
@@ -1391,12 +1438,18 @@ function TelaBloqueada({ whatsEscola, telEscola, onDesbloquear }) {
 }
 
 // ── TELA PROPRIETÁRIO ─────────────────────────────────────────────────────────
-function TelaProprietario({ nomeEscola, setNomeEscola, telEscola, setTelEscola, whatsEscola, setWhatsEscola, alunos, onSalvarAluno, onExcluirAluno, comunicados, onExcluirComunicado, themeKey, onChangeTheme, appBloqueado, onSetBloqueado, onSalvarConfigEscola, onVoltar }) {
+function TelaProprietario({ usuariosEscola, setUsuariosEscola, onSalvarLoginEscola, nomeEscola, setNomeEscola, telEscola, setTelEscola, whatsEscola, setWhatsEscola, alunos, onSalvarAluno, onExcluirAluno, comunicados, onExcluirComunicado, themeKey, onChangeTheme, appBloqueado, onSetBloqueado, onSalvarConfigEscola, onVoltar }) {
   const [aba, setAba] = useState("geral");
   const [nomeTemp, setNomeTemp]   = useState(nomeEscola);
   const [telTemp, setTelTemp]     = useState(telEscola);
   const [whatsTemp, setWhatsTemp] = useState(whatsEscola);
   const [salvo, setSalvo]         = useState(false);
+
+  const [loginEscola, setLoginEscola] = useState(
+    usuariosEscola[0]?.email || ""
+  );
+
+  const [senhaEscola, setSenhaEscola] = useState("");
 
   const salvar = () => {
     setNomeEscola(nomeTemp);
@@ -1459,6 +1512,83 @@ function TelaProprietario({ nomeEscola, setNomeEscola, telEscola, setTelEscola, 
                 </button>
               ))}
             </div>
+            
+            <div style={{ background:"#12122a", border:"2px solid #2a2a5a", borderRadius:20, padding:20, marginBottom:20 }}>
+              <div style={{ fontSize:20, fontWeight:900, color:"#f59e0b", marginBottom:18 }}>
+                🔐 Login da Escola
+              </div>
+
+              <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>
+                👤 Login da Escola
+              </label>
+
+              <input
+                type="text"
+                value={loginEscola}
+                onChange={e=>setLoginEscola(e.target.value)}
+                placeholder="Digite o login"
+                style={iS}
+              />
+
+              <label style={{ display:"block", fontSize:13, fontWeight:700, color:"#aaa", marginBottom:6 }}>
+                🔒 Nova Senha
+              </label>
+
+              <input
+                type="password"
+                value={senhaEscola}
+                onChange={e=>setSenhaEscola(e.target.value)}
+                placeholder="Digite a nova senha"
+                style={iS}
+              />
+
+              <button
+                onClick={async () => {
+
+                  if(!loginEscola.trim()) {
+                    alert("Digite o login da escola");
+                    return;
+                  }
+
+                  if(!senhaEscola.trim()) {
+                    alert("Digite a nova senha");
+                    return;
+                  }
+
+                  const senhaHash = await sha256(senhaEscola.trim());
+
+                  const novosUsuarios = [
+                    {
+                      ...usuariosEscola[0],
+                      email: loginEscola.trim(),
+                      senha: senhaHash
+                    }
+                  ];
+
+                  setUsuariosEscola(novosUsuarios);
+                  onSalvarLoginEscola(novosUsuarios);
+
+                  alert("✅ Login e senha alterados com sucesso!");
+
+                  setSenhaEscola("");
+                }}
+                style={{
+                  width:"100%",
+                  padding:16,
+                  borderRadius:14,
+                  border:"none",
+                  background:"#f59e0b",
+                  color:"#12122a",
+                  fontSize:17,
+                  fontWeight:800,
+                  cursor:"pointer",
+                  fontFamily:"'Nunito',sans-serif"
+                }}
+              >
+                💾 Salvar Login e Senha
+              </button>
+            </div>
+
             {salvo && <div style={{ background:"#0a2e1a", border:"2px solid #27ae60", borderRadius:10, padding:"10px 14px", color:"#27ae60", fontWeight:700, fontSize:14, marginBottom:14 }}>✅ Configurações salvas!</div>}
             <button onClick={salvar} style={{ width:"100%", padding:16, borderRadius:14, border:"none", background:"#f59e0b", color:"#12122a", fontSize:16, fontWeight:800, cursor:"pointer", fontFamily:"'Nunito',sans-serif" }}>💾 Salvar Configurações</button>
           </div>
