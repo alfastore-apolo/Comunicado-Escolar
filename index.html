@@ -371,7 +371,7 @@ function App() {
     ) || null;
   };
 
-  if (appBloqueado) return <TelaBloqueada whatsEscola={whatsEscola} telEscola={telEscola} onDesbloquear={() => setAppBloqueado(false)} />;
+  if (appBloqueado) return <TelaBloqueada whatsEscola={whatsEscola} telEscola={telEscola} onDesbloquear={() => fbSetBloqueado(false)} />;
 
   if (telaPropriet) return (
     <TelaProprietario
