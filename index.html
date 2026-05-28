@@ -215,32 +215,32 @@ function App() {
   const fbSalvarComunicado = (aviso) => {
     const db = window._firebaseDB;
     if (!db) { setComunicados(prev => [aviso, ...prev]); return; }
-    window._firebaseSet(window._firebaseRef(db, \`comunicados/\${aviso.id}\`), aviso);
+    window._firebaseSet(window._firebaseRef(db, "comunicados/" + aviso.id), aviso);
   };
 
   const fbExcluirComunicado = (id) => {
     const db = window._firebaseDB;
     if (!db) { setComunicados(prev => prev.filter(x => x.id !== id)); return; }
-    window._firebaseRemove(window._firebaseRef(db, \`comunicados/\${id}\`));
+    window._firebaseRemove(window._firebaseRef(db, "comunicados/" + id));
   };
 
   const fbSalvarAluno = (aluno) => {
     const db = window._firebaseDB;
     if (!db) { setAlunos(prev => { const idx = prev.findIndex(a=>a.id===aluno.id); return idx>=0 ? prev.map(a=>a.id===aluno.id?aluno:a) : [...prev,aluno]; }); return; }
-    window._firebaseSet(window._firebaseRef(db, \`alunos/\${aluno.id}\`), aluno);
+    window._firebaseSet(window._firebaseRef(db, "alunos/" + aluno.id), aluno);
   };
 
   const fbExcluirAluno = (id) => {
     const db = window._firebaseDB;
     if (!db) { setAlunos(prev => prev.filter(a => a.id !== id)); return; }
-    window._firebaseRemove(window._firebaseRef(db, \`alunos/\${id}\`));
+    window._firebaseRemove(window._firebaseRef(db, "alunos/" + id));
   };
 
   const fbEnviarMensagem = (paiId, msg) => {
     const db = window._firebaseDB;
     if (!db) { setMensagens(prev => ({ ...prev, [paiId]: [...(prev[paiId]||[]), msg] })); return; }
     const novas = [...(mensagens[paiId]||[]), msg];
-    window._firebaseSet(window._firebaseRef(db, \`mensagens/\${paiId}\`), novas);
+    window._firebaseSet(window._firebaseRef(db, "mensagens/" + paiId), novas);
   };
 
   const fbSetBloqueado = (val) => {
@@ -259,7 +259,7 @@ function App() {
     const db = window._firebaseDB;
     const novo = { ...presencas, [reuniaoId]: { ...(presencas[reuniaoId]||{}), [usuarioId]: valor } };
     if (!db) { setPresencas(novo); return; }
-    window._firebaseSet(window._firebaseRef(db, \`presencas/\${reuniaoId}/\${usuarioId}\`), valor);
+    window._firebaseSet(window._firebaseRef(db, "presencas/" + reuniaoId + "/" + usuarioId), valor);
   };
 
   const todosPerfis = [...USUARIOS_ESCOLA, ...alunos];
