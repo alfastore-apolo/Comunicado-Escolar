@@ -2,6 +2,7 @@
   "name": "Escola Conectada",
   "short_name": "EscolaApp",
   "description": "Comunicação segura entre escola e responsáveis",
+  "id": "https://comunicacao--escolar.web.app/",
   "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#1a5276",
@@ -22,7 +23,22 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [],
+  "screenshots": [
+    {
+      "src": "/screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Tela principal do Escola Conectada"
+    },
+    {
+      "src": "/screenshot-narrow.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "App no celular"
+    }
+  ],
   "categories": ["education", "productivity"],
   "prefer_related_applications": false
 }
