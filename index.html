@@ -371,8 +371,6 @@ function App() {
     ) || null;
   };
 
-  if (appBloqueado) return <TelaBloqueada whatsEscola={whatsEscola} telEscola={telEscola} onDesbloquear={() => fbSetBloqueado(false)} />;
-
   if (telaPropriet) return (
     <TelaProprietario
       usuariosEscola={usuariosEscola}
@@ -390,6 +388,8 @@ function App() {
       onVoltar={() => setTelaPropriet(false)}
     />
   );
+
+  if (appBloqueado) return <TelaBloqueada whatsEscola={whatsEscola} telEscola={telEscola} onDesbloquear={() => fbSetBloqueado(false)} />;
 
   if (!usuario) return <TelaLogin onLogin={u => { setUsuario(u); fbRegistrarAcesso(u.id); fbIniciarHeartbeat(u.id); }} loginFn={login} th={th} themeKey={themeKey} onChangeTheme={setThemeKey} onAbrirPropriet={() => setTelaPropriet(true)} nomeEscola={nomeEscola} telEscola={telEscola} whatsEscola={whatsEscola} />;
 
