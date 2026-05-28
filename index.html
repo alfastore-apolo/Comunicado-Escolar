@@ -1794,10 +1794,16 @@ function TelaProprietario({ usuariosEscola, setUsuariosEscola, onSalvarLoginEsco
               <div style={{ fontSize:13, color:"#666" }}>{appBloqueado ? "Usuários veem tela de assinatura expirada" : "Usuários acessam normalmente"}</div>
             </div>
             <button
-              onClick={()=>onSetBloqueado(!appBloqueado)}
-              style={{ width:"100%", padding:18, borderRadius:16, border:"none", background:appBloqueado?"#27ae60":"#e74c3c", color:"#fff", fontSize:17, fontWeight:900, cursor:"pointer", fontFamily:"'Nunito',sans-serif", boxShadow:appBloqueado?"0 4px 20px #27ae6044":"0 4px 20px #e74c3c44" }}
+              onClick={()=>onSetBloqueado(true)}
+              style={{ width:"100%", padding:18, borderRadius:16, border:"none", background:"#e74c3c", color:"#fff", fontSize:17, fontWeight:900, cursor:"pointer", fontFamily:"'Nunito',sans-serif", boxShadow:"0 4px 20px #e74c3c44", marginBottom:12 }}
             >
-              {appBloqueado ? "🔓 Desbloquear App" : "🔒 Bloquear App (Expirar Assinatura)"}
+              🔒 Bloquear App (Expirar Assinatura)
+            </button>
+            <button
+              onClick={()=>onSetBloqueado(false)}
+              style={{ width:"100%", padding:18, borderRadius:16, border:"none", background:"#27ae60", color:"#fff", fontSize:17, fontWeight:900, cursor:"pointer", fontFamily:"'Nunito',sans-serif", boxShadow:"0 4px 20px #27ae6044" }}
+            >
+              🔓 Desbloquear App
             </button>
           </div>
         )}
