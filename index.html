@@ -196,6 +196,13 @@ function App() {
         if (val) setPresencas(val);
       });
 
+      // Turmas
+      onValue(fbRef(db, 'config/turmas'), snap => {
+        const val = snap.val();
+        if (val && val.extras) window._turmasExtras = val.extras;
+        if (val && val.excluidas) window._turmasExcluidas = val.excluidas;
+      });
+
       // Config escola
       onValue(fbRef(db, 'config/escola'), snap => {
         const val = snap.val();
@@ -256,6 +263,12 @@ function App() {
     window._firebaseSet(window._firebaseRef(db, 'config/escola'), { nome, tel, whats });
   };
 
+  const fbSalvarTurmas = (extras, excluidas) => {
+    const db = window._firebaseDB;
+    if (!db) return;
+    window._firebaseSet(window._firebaseRef(db, 'config/turmas'), { extras: extras || [], excluidas: excluidas || [] });
+  };
+
   const fbSalvarPresenca = (reuniaoId, usuarioId, valor) => {
     const db = window._firebaseDB;
     const novo = { ...presencas, [reuniaoId]: { ...(presencas[reuniaoId]||{}), [usuarioId]: valor } };
@@ -296,6 +309,7 @@ function App() {
       onSalvarComunicado={fbSalvarComunicado} onExcluirComunicado={fbExcluirComunicado}
       mensagens={mensagens} onEnviarMensagem={fbEnviarMensagem}
       alunos={alunos} onSalvarAluno={fbSalvarAluno} onExcluirAluno={fbExcluirAluno}
+      onSalvarTurmas={fbSalvarTurmas}
       presencas={presencas}
       onSair={() => setUsuario(null)} th={th} themeKey={themeKey} onChangeTheme={setThemeKey} />
   );
@@ -462,7 +476,7 @@ function TelaLogin({ onLogin, loginFn, th, themeKey, onChangeTheme, onAbrirPropr
 }
 
 // ── TELA ESCOLA ───────────────────────────────────────────────────────────────
-function TelaEscola({ usuario, comunicados, onSalvarComunicado, onExcluirComunicado, mensagens, onEnviarMensagem, alunos, onSalvarAluno, onExcluirAluno, presencas, onSair, th, themeKey, onChangeTheme }) {
+function TelaEscola({ usuario, comunicados, onSalvarComunicado, onExcluirComunicado, mensagens, onEnviarMensagem, alunos, onSalvarAluno, onExcluirAluno, onSalvarTurmas, presencas, onSair, th, themeKey, onChangeTheme }) {
   const [aba, setAba]                   = useState("avisos");
   const [paiSelecionado, setPaiSel]     = useState(null);
 
@@ -551,7 +565,7 @@ function TelaEscola({ usuario, comunicados, onSalvarComunicado, onExcluirComunic
         )}
 
         {aba === "alunos" && (
-          <GerenciarAlunos alunos={alunos} onSalvarAluno={onSalvarAluno} onExcluirAluno={onExcluirAluno} th={th} />
+          <GerenciarAlunos alunos={alunos} onSalvarAluno={onSalvarAluno} onExcluirAluno={onExcluirAluno} onSalvarTurmas={onSalvarTurmas} th={th} />
         )}
 
         {aba === "presencas" && (
@@ -659,9 +673,9 @@ function AbaPresencas({ comunicados, alunos, presencas, th }) {
 }
 
 // ── GERENCIAR ALUNOS ──────────────────────────────────────────────────────────
-function FormAluno({ inicial, modoNovo, onSalvar, onVoltar, th, turmasExtras, setTurmasExtras }) {
+function FormAluno({ inicial, modoNovo, onSalvar, onVoltar, th, turmasExtras, setTurmasExtras, turmasExcluidasInit, setTurmasExcluidasGlobal }) {
   const TURMAS_BASE = ["6A","6B","7A","7B","8A","8B","9A","9B"];
-  const [turmasExcluidas, setTurmasExcluidas] = useState([]);
+  const [turmasExcluidas, setTurmasExcluidas] = useState(turmasExcluidasInit || []);
 
   const todasTurmas = [...TURMAS_BASE.filter(t => !turmasExcluidas.includes(t)), ...turmasExtras];
 
@@ -713,6 +727,7 @@ function FormAluno({ inicial, modoNovo, onSalvar, onVoltar, th, turmasExtras, se
       setTurmasExtras(prev => prev.filter(x => x !== t));
     } else {
       setTurmasExcluidas(prev => [...prev, t]);
+      if (setTurmasExcluidasGlobal) setTurmasExcluidasGlobal(prev => [...prev, t]);
     }
     if (turma === t) setTurma("");
     setDeletingTurma(false);
@@ -829,12 +844,13 @@ function FormAluno({ inicial, modoNovo, onSalvar, onVoltar, th, turmasExtras, se
   );
 }
 
-function GerenciarAlunos({ alunos, onSalvarAluno, onExcluirAluno, th }) {
+function GerenciarAlunos({ alunos, onSalvarAluno, onExcluirAluno, onSalvarTurmas, th }) {
   const [tela,        setTela]        = useState("lista");
   const [selecionado, setSelecionado] = useState(null);
   const [busca,       setBusca]       = useState("");
   const [excluindo,   setExcluindo]   = useState(null);
-  const [turmasExtras, setTurmasExtras] = useState([]);
+  const [turmasExtras, setTurmasExtras] = useState(window._turmasExtras || []);
+  const [turmasExcluidasGlobal, setTurmasExcluidasGlobal] = useState(window._turmasExcluidas || []);
 
   const filtrados = alunos.filter(a =>
     (a.filho||"").toLowerCase().includes(busca.toLowerCase()) ||
@@ -853,7 +869,17 @@ function GerenciarAlunos({ alunos, onSalvarAluno, onExcluirAluno, th }) {
   };
 
   if (tela === "novo" || tela === "editar") {
-    return <FormAluno inicial={selecionado} modoNovo={tela==="novo"} onSalvar={salvar} onVoltar={() => { setTela("lista"); setSelecionado(null); }} th={th} turmasExtras={turmasExtras} setTurmasExtras={setTurmasExtras} />;
+    const handleSetTurmasExtras = (fn) => {
+      const novas = typeof fn === 'function' ? fn(turmasExtras) : fn;
+      setTurmasExtras(novas);
+      if (onSalvarTurmas) onSalvarTurmas(novas, turmasExcluidasGlobal);
+    };
+    const handleSetTurmasExcluidas = (fn) => {
+      const novas = typeof fn === 'function' ? fn(turmasExcluidasGlobal) : fn;
+      setTurmasExcluidasGlobal(novas);
+      if (onSalvarTurmas) onSalvarTurmas(turmasExtras, novas);
+    };
+    return <FormAluno inicial={selecionado} modoNovo={tela==="novo"} onSalvar={salvar} onVoltar={() => { setTela("lista"); setSelecionado(null); }} th={th} turmasExtras={turmasExtras} setTurmasExtras={handleSetTurmasExtras} turmasExcluidasInit={turmasExcluidasGlobal} setTurmasExcluidasGlobal={handleSetTurmasExcluidas} />;
   }
 
   return (
