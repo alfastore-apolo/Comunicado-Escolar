@@ -1,24 +1,28 @@
 {
-  "name": "CETI Dariana — Comunicados",
-  "short_name": "CETI Dariana",
-  "description": "App de comunicados escolares do CETI Dariana Correa Lopes",
-  "start_url": "/",
+  "name": "Escola Conectada",
+  "short_name": "EscolaApp",
+  "description": "Comunicação segura entre escola e responsáveis",
+  "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#1a5276",
   "theme_color": "#1a5276",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
+  "lang": "pt-BR",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "icon-512.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "screenshots": [],
+  "categories": ["education", "productivity"],
+  "prefer_related_applications": false
 }
